@@ -1,0 +1,39 @@
+version: "3.7"
+
+services:
+
+    mongo:
+        container_name: mongodb
+        image: mongo:4.2
+        environment:
+            - MONGO_INITDB_ROOT_USERNAME=admin
+            - MONGO_INITDB_DATABASE=auth
+            - MONGO_INITDB_ROOT_PASSWORD=admin
+        networks:
+            - mongo-compose-network
+        ports:
+            - '27017:27017'
+        volumes:
+            - ./data:/data/db
+
+    mongo-express:
+        container_name: mongo-express
+        image: mongo-express
+        depends_on:
+            - mongo
+        networks:
+            - mongo-compose-network
+        environment:
+            - ME_CONFIG_MONGODB_SERVER=mongo
+            - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+            - ME_CONFIG_MONGODB_ADMINPASSWORD=admin
+            - ME_CONFIG_BASICAUTH_USERNAME=admin
+            - ME_CONFIG_BASICAUTH_PASSWORD=admin
+        ports:
+            - '8081:8081'
+        volumes:
+            - ./data:/data/db
+
+networks:
+    mongo-compose-network:
+        driver: bridge
