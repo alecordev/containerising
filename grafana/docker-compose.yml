@@ -1,0 +1,110 @@
+# https://dev.to/project42/install-grafana-influxdb-telegraf-using-docker-compose-56e9
+# https://github.com/vegasbrianc/prometheus
+version: "3"
+
+services:
+
+    grafana:
+        image: grafana/grafana
+        container_name: grafana
+        restart: always
+        ports:
+            - 3000:3000
+        networks:
+            - monitoring
+        volumes:
+            - ./grafana:/vol01/Docker/monitoring
+
+    influxdb:
+        image: influxdb
+        container_name: influxdb
+        restart: always
+        ports:
+            - 8086:8086
+            - 8082:8082
+            - 8083:8083
+            - 8089:8089/udp
+        networks:
+            - monitoring
+        volumes:
+            - ./influxdb:/vol01/Docker/monitoring
+    #        environment:
+    #            - INFLUXDB_DB=telegraf
+    #            - INFLUXDB_USER=telegraf
+    #            - INFLUXDB_ADMIN_ENABLED=true
+    #            - INFLUXDB_ADMIN_USER=admin
+    #            - INFLUXDB_ADMIN_PASSWORD=admin
+
+    telegraf:
+        image: telegraf
+        container_name: telegraf
+        restart: always
+        extra_hosts:
+            - "influxdb:192.168.0.110"
+        environment:
+            HOST_PROC: /rootfs/proc
+            HOST_SYS: /rootfs/sys
+            HOST_ETC: /rootfs/etc
+        volumes:
+            - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+            - /var/run/docker.sock:/var/run/docker.sock:ro
+            - /sys:/rootfs/sys:ro
+            - /proc:/rootfs/proc:ro
+            - /etc:/rootfs/etc:ro
+
+    prometheus:
+        image: prom/prometheus:v2.1.0
+        volumes:
+            - ./prometheus/:/etc/prometheus/
+            - ./prometheus_data:/prometheus
+        command:
+            - '--config.file=/etc/prometheus/prometheus.yml'
+            - '--storage.tsdb.path=/prometheus'
+            - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+            - '--web.console.templates=/usr/share/prometheus/consoles'
+        ports:
+            - 9090:9090
+        links:
+            - cadvisor:cadvisor
+            - alertmanager:alertmanager
+        #      - pushgateway:pushgateway
+        depends_on:
+            - cadvisor
+        #      - pushgateway
+        networks:
+            - monitoring
+        restart: always
+
+    alertmanager:
+        image: prom/alertmanager
+        ports:
+            - 9093:9093
+        volumes:
+            - ./alertmanager/:/etc/alertmanager/
+        networks:
+            - monitoring
+        restart: always
+        command:
+            - '--config.file=/etc/alertmanager/config.yml'
+            - '--storage.path=/alertmanager'
+
+    cadvisor:
+        image: google/cadvisor
+        volumes:
+            - /:/rootfs:ro
+            - /var/run:/var/run:rw
+            - /sys:/sys:ro
+            - /var/lib/docker/:/var/lib/docker:ro
+        ports:
+            - 8080:8080
+        networks:
+            - monitoring
+        restart: always
+        deploy:
+            mode: global
+
+networks:
+    monitoring:
+volumes:
+    grafana-volume:
+    influxdb-volume:
