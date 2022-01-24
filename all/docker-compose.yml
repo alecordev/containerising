@@ -1,0 +1,175 @@
+version: '3.7'
+
+services:
+    rabbitmq:
+        image: rabbitmq:3-management-alpine
+        container_name: rabbitmq
+        volumes:
+            - ./.docker/rabbitmq/etc/:/usr/share/etc/rabbitmq/
+            - ./.docker/rabbitmq/data/:/usr/share/var/lib/rabbitmq/
+            - ./.docker/rabbitmq/logs/:/usr/share/var/log/rabbitmq/
+        environment:
+            RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
+            RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
+        ports:
+            - 5672:5672
+            - 15672:15672
+        networks:
+            internal-rabbit-network:
+
+    redis:
+        image: redis:alpine
+        command: redis-server --requirepass password
+        ports:
+            - "6379:6379"
+        volumes:
+            - ./.docker/redis/data:/var/lib/redis
+            - ./configs/redis.conf:/usr/local/etc/redis/redis.conf
+        environment:
+            - REDIS_REPLICATION_MODE=master
+        deploy:
+            resources:
+                limits:
+                  memory: 512M
+#                reservations:
+#                  memory: 128M
+#        networks:
+#            node_net:
+#                ipv4_address: 172.28.1.2
+
+    elasticsearch:
+        image: docker.elastic.co/elasticsearch/elasticsearch:7.12.1
+        container_name: elasticsearch
+        environment:
+            - xpack.security.enabled=false
+            - discovery.type=single-node
+#            - cluster.name=es-docker
+#            - node.name=node1
+            - bootstrap.memory_lock=true
+            - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
+        ulimits:
+            memlock:
+                soft: -1
+                hard: -1
+            nofile:
+                soft: 65536
+                hard: 65536
+        cap_add:
+            - IPC_LOCK
+        volumes:
+            - ./.docker/data/elastic:/usr/share/elasticsearch/data
+        ports:
+            - 9200:9200
+            - 9300:9300
+        networks:
+            internal-elastic-network:
+        deploy:
+            resources:
+                limits:
+                  memory: 4g
+#                reservations:
+#                  memory: 128M
+
+    kibana:
+        container_name: kibana
+        image: docker.elastic.co/kibana/kibana:7.12.1
+        environment:
+            - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+        ports:
+            - 5601:5601
+        depends_on:
+            - elasticsearch
+        networks:
+            internal-elastic-network:
+        deploy:
+            resources:
+                limits:
+                  memory: 1g
+#                reservations:
+#                  memory: 128M
+
+    postgres:
+        container_name: postgres_container
+        image: postgres
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-postgres}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+            PGDATA: /data/postgres
+        volumes:
+            - ./.docker/data/postgres:/data/postgres
+        ports:
+            - "5432:5432"
+        networks:
+            - postgres
+        restart: unless-stopped
+
+    pgadmin:
+        container_name: pgadmin_container
+        image: dpage/pgadmin4
+        environment:
+            PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin@pgadmin.org}
+            PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+            PGADMIN_CONFIG_SERVER_MODE: 'False'
+        volumes:
+            - ./.docker/pgadmin:/root/.pgadmin
+        ports:
+            - "${PGADMIN_PORT:-5050}:80"
+        networks:
+            - postgres
+        restart: unless-stopped
+
+    mongo:
+        container_name: mongodb
+        image: mongo:4.2
+        environment:
+            - MONGO_INITDB_ROOT_USERNAME=admin
+            - MONGO_INITDB_DATABASE=auth
+            - MONGO_INITDB_ROOT_PASSWORD=admin
+        networks:
+            - mongo-compose-network
+        ports:
+            - '27017:27017'
+        volumes:
+            - ./.docker/data/mongodb:/data/db
+
+    mongo-express:
+        container_name: mongo-express
+        image: mongo-express
+        depends_on:
+            - mongo
+        networks:
+            - mongo-compose-network
+        environment:
+            - ME_CONFIG_MONGODB_SERVER=mongo
+            - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
+            - ME_CONFIG_MONGODB_ADMINPASSWORD=admin
+            - ME_CONFIG_BASICAUTH_USERNAME=admin
+            - ME_CONFIG_BASICAUTH_PASSWORD=admin
+        ports:
+            - '8081:8081'
+        volumes:
+            - ./.docker/data/mongoexpress:/data/db
+
+networks:
+    internal-rabbit-network:
+        name: internal-rabbit-network
+        external: false
+    internal-elastic-network:
+        name: internal-elastic-network
+        external: false
+#    node_net:
+#        ipam:
+#            driver: default
+#            config:
+#                -   subnet: 172.28.0.0/16
+    postgres:
+        driver: bridge
+    mongo-compose-network:
+        driver: bridge
+
+volumes:
+    elasticsearch-data:
+        driver: local
+    postgres:
+#    pgadmin:

@@ -1,0 +1,4 @@
+elasticsearch
+elasticsearch[async]
+elasticsearch-dsl
+python-dotenv
