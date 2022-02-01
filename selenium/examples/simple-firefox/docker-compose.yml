@@ -1,0 +1,8 @@
+version: "3.9"
+
+services:
+    seleniumfirefox:
+        build: .
+        command: python app.py
+        volumes:
+            - ./app:/app

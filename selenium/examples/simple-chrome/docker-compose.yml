@@ -1,0 +1,8 @@
+version: "3.7"
+
+services:
+    selenium:
+        build: .
+        command: python app.py
+        volumes:
+            - .:/app
