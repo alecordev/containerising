@@ -1,0 +1,2 @@
+pyorient  # https://github.com/mogui/pyorient
+-e git+https://github.com/orientechnologies/pyorient.git@master#egg=pyorient
