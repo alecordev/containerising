@@ -7,7 +7,7 @@ def main():
     print(
         subprocess.run(
             'docker run -d -p 4444:4444 -p 7900:7900 --shm-size="2g" --name firefox-selenium selenium/standalone-firefox:4.1.2-20220131',
-            shell=True
+            shell=True,
         )
     )
     driver = webdriver.Remote(command_executor="http://localhost:4444")

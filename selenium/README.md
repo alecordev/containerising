@@ -11,6 +11,11 @@
 - `localhost:4444` to access Selenium grid if using docker-compose.
 - `docker run -d -p 4444:4444 --shm-size="2g" selenium/standalone-firefox:4.1.1-20220121`
 
+```
+from selenium import webdriver
+driver = webdriver.Remote(command_executor='http://localhost:4444')
+```
+
 ## Resources
 
 - https://github.com/SeleniumHQ/docker-selenium
