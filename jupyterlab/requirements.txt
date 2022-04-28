@@ -1,0 +1,13 @@
+ipython
+jupyterlab
+
+numpy
+pandas
+matplotlib
+statsmodels
+scipy
+sympy
+
+scikit-learn
+#torch
+plotly
