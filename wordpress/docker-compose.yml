@@ -2,9 +2,9 @@ version: "3.9"
 
 services:
     db:
-        image: mysql:5.7
+        image: mysql:latest
         volumes:
-            - ./db_data:/var/lib/mysql
+            - ./.docker/db_data:/var/lib/mysql
         restart: always
         environment:
             MYSQL_ROOT_PASSWORD: root
@@ -17,7 +17,7 @@ services:
             - db
         image: wordpress:latest
         volumes:
-            - ./wp_html:/var/www/html
+            - ./.docker/wp_html:/var/www/html
         ports:
             - "8000:80"
         restart: always
@@ -26,7 +26,3 @@ services:
             WORDPRESS_DB_USER: wordpress
             WORDPRESS_DB_PASSWORD: wordpress
             WORDPRESS_DB_NAME: wordpress
-
-volumes:
-    db_data: {}
-    wordpress_data: {}
