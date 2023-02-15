@@ -4,7 +4,7 @@ services:
 
     mongo:
         container_name: mongodb
-        image: mongo:4.2
+        image: mongo:latest
         environment:
             - MONGO_INITDB_ROOT_USERNAME=admin
             - MONGO_INITDB_DATABASE=auth
@@ -14,7 +14,7 @@ services:
         ports:
             - '27017:27017'
         volumes:
-            - ./data:/data/db
+            - ./.docker/data:/data/db
 
     mongo-express:
         container_name: mongo-express
@@ -32,7 +32,7 @@ services:
         ports:
             - '8081:8081'
         volumes:
-            - ./data:/data/db
+            - ./.docker/data:/data/db
 
 networks:
     mongo-compose-network:
