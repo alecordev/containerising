@@ -1,5 +1,7 @@
 # Wordpress
 
+- Run docker-compose: `docker-compose up --build --force-recreate --no-deps`
+
 ```
 version: "3.9"
     
