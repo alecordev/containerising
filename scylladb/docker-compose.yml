@@ -1,0 +1,12 @@
+version: '3.8'
+
+services:
+  scylla:
+    image: scylladb/scylla:latest
+    container_name: scylla
+    ports:
+      - 9042:9042 # CQL port
+      - 9160:9160 # Thrift port
+    volumes:
+      - ./.docker/data:/var/lib/scylla
+    restart: unless-stopped
