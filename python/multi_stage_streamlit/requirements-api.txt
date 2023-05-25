@@ -1,0 +1,7 @@
+fastapi==0.95.2
+pydantic==1.10.2
+uvicorn==0.22.0
+pandas==2.0.1
+python-dotenv==1.0.0
+sqlalchemy==2.0.15
+httpx==0.24.1

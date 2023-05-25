@@ -1,0 +1,25 @@
+version: "3.9"
+
+services:
+
+    app:
+        build:
+            context: .
+            dockerfile: Dockerfile
+        environment:
+            - API_KEY=key
+        volumes:
+            - ./data:/data
+        command: uvicorn api:app --host 0.0.0.0 --port 8081
+        ports:
+            - "8081:8081"
+
+    dashboard:
+        build:
+            context: .
+            dockerfile: Dockerfile-dashboard
+        volumes:
+            - ./data:/data
+        command: streamlit run user_intents_dashboard.py
+        ports:
+            - "8501:8501"
