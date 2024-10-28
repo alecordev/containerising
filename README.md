@@ -23,3 +23,8 @@ To clear networks:
 Rebuild:
 
 - `docker-compose up --build --force-recreate --no-deps`
+
+## Additional commands
+
+- `docker-compose up --build --force-recreate --no-deps`
+- `docker-compose down`
