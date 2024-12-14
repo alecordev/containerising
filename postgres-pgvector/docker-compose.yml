@@ -1,0 +1,18 @@
+services:
+    postgresql-pgvector:
+        build:
+          context: .
+          dockerfile: Dockerfile
+        container_name: postgres-pgvector
+        ports:
+            - "5432:5432"
+        environment:
+            - POSTGRES_DB=postgres
+            - POSTGRES_USER=postgres
+            - POSTGRES_PASSWORD=postgres
+            - DATABASE_HOST=${DB_HOST:-localhost}
+        volumes:
+            - ./.docker/postgres/data:/var/lib/postgresql/data
+            - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+            - ./vector_extension.sql:/docker-entrypoint-initdb.d/0-vector_extension.sql
+        restart: unless-stopped
