@@ -1,36 +1,59 @@
-version: "3.5"
-services:
-    zookeeper:
-        image: "bitnami/zookeeper:latest"
-        container_name: "kafka-zookeeper"
-        networks:
-            - "kafka"
-        ports:
-            - "2181:2181"
-        environment:
-            - ALLOW_ANONYMOUS_LOGIN=yes
-#        volumes:
-#            - ./zookeeper_data:/bitnami
+# Single-node KRaft broker + Kafka UI (kafbat). Dual listeners: INTERNAL for containers, EXTERNAL for the host.
+# Set KAFKA_EXTERNAL_HOST to your machine's hostname/IP when clients connect from other machines.
+name: kafka-advanced
 
+services:
     kafka:
-        image: bitnami/kafka:latest
-        container_name: "kafka"
+        image: apache/kafka:${KAFKA_VERSION:-4.4.0}
+        container_name: kafka
+        hostname: kafka
         networks:
-            - "kafka"
+            - kafka
         ports:
-            - "9092:9092"
+            - "${KAFKA_PORT:-9092}:9092"
         environment:
-            - KAFKA_BROKER_ID=1
-            - KAFKA_LISTENERS=PLAINTEXT://:9092
-            - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://10.5.0.1:9092
-            - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
-            - ALLOW_PLAINTEXT_LISTENER=yes
+            CLUSTER_ID: ${CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+            KAFKA_NODE_ID: 1
+            KAFKA_PROCESS_ROLES: broker,controller
+            KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+            KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+            KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_PORT:-9092}
+            KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+            KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+            KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+            KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+            KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+            KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+            KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+        volumes:
+            - kafka-data:/var/lib/kafka/data
+        healthcheck:
+            test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+            interval: 15s
+            timeout: 10s
+            retries: 10
+            start_period: 30s
+        restart: unless-stopped
+
+    kafka-ui:
+        image: kafbat/kafka-ui:${KAFKA_UI_VERSION:-v1.5.0}
+        container_name: kafka-ui
+        networks:
+            - kafka
+        ports:
+            - "${KAFKA_UI_PORT:-8090}:8080"
+        environment:
+            KAFKA_CLUSTERS_0_NAME: local
+            KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:19092
+            DYNAMIC_CONFIG_ENABLED: "true"
         depends_on:
-            - zookeeper
-#        volumes:
-#            - ./kafka_data:/bitnami
+            kafka:
+                condition: service_healthy
+        restart: unless-stopped
 
 networks:
     kafka:
-        name: "kafka"
-        driver: bridge
+        name: kafka
+
+volumes:
+    kafka-data:

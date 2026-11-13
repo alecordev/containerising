@@ -1,0 +1,30 @@
+{
+    # Ports Caddy listens on inside the container (must match the compose port mappings)
+    http_port  {$CADDY_HTTP_PORT:8080}
+    https_port {$CADDY_HTTPS_PORT:8443}
+}
+
+# `tls internal` = certificates from Caddy's own local CA (automatic for *.localhost anyway,
+# stated explicitly so it also works for other local hostnames you add to your hosts file).
+{$CADDY_SITE:app.localhost} {
+    tls internal
+
+    # Static files from ./site served under /static/
+    handle_path /static/* {
+        root * /srv
+        file_server
+    }
+
+    # Must be a handle block: a bare `respond` is ordered after the catch-all `handle` below and never matches.
+    handle /healthz {
+        respond "ok" 200
+    }
+
+    # Everything else is proxied to the demo upstream
+    handle {
+        reverse_proxy upstream:8000
+    }
+
+    encode zstd gzip
+    log
+}

@@ -1,0 +1,18 @@
+services:
+    mockoon:
+        image: mockoon/cli:${MOCKOON_VERSION:-9.10.0}
+        container_name: mockoon
+        # Entrypoint is `mockoon-cli start`; flags below are its arguments
+        command: ["--data", "/data/mockoon-env.json", "--port", "3000", "--hostname", "0.0.0.0"]
+        ports:
+            - "${MOCKOON_PORT:-3001}:3000"
+        volumes:
+            # Edit the file (or export one from the Mockoon desktop app) and restart the container
+            - ./mockoon-env.json:/data/mockoon-env.json:ro
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3000/hello || exit 1"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        restart: unless-stopped

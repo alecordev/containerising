@@ -1,0 +1,30 @@
+services:
+  oracle:
+    # Community-standard image of Oracle Database Free (maintained by Gerald Venzl, an Oracle developer advocate).
+    # "slim-faststart" = smaller image with a pre-created database, so the first start takes seconds instead of minutes.
+    image: gvenzl/oracle-free:${ORACLE_VERSION:-23.26.3-slim-faststart}
+    container_name: oracle-free
+    restart: unless-stopped
+    environment:
+      ORACLE_PASSWORD: ${ORACLE_PASSWORD:-oracle}   # password for SYS, SYSTEM and PDBADMIN
+      # ORACLE_DATABASE is deliberately NOT set: the faststart image ships FREEPDB1, and naming it here makes the
+      # entrypoint try to create it again (ORA-65012 "already exists") and restart-loop.
+      APP_USER: ${APP_USER:-app}
+      APP_USER_PASSWORD: ${APP_USER_PASSWORD:-app}
+    ports:
+      - "${ORACLE_PORT:-1521}:1521"
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      # *.sql / *.sh files run once, after the database is ready (first start only)
+      - ./initdb:/container-entrypoint-initdb.d:ro
+    shm_size: 1gb
+    healthcheck:
+      # healthcheck.sh ships with the gvenzl images
+      test: ["CMD", "healthcheck.sh"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+
+volumes:
+  oracle-data:

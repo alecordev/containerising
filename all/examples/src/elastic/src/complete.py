@@ -1,13 +1,19 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "elasticsearch[async]>=9.5,<10",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
 import datetime
+import os
 import uuid
 
-import elasticsearch
 from elasticsearch import helpers
 from elasticsearch import Elasticsearch
 
-client = Elasticsearch(
-    hosts=["http://localhost:9200"], use_ssl=False, verify_certs=False
-)
+client = Elasticsearch(os.getenv("ELASTICSEARCH_URL", "http://localhost:9200"))
 
 print(client.ping())
 resp = client.info()
@@ -16,7 +22,7 @@ print(resp)
 # Create index
 index_name = "companies"
 mapping = {
-    "settings": {"number_of_shards": "20", "number_of_replicas": "2"},
+    "settings": {"number_of_shards": 1, "number_of_replicas": 0},
     "mappings": {
         "properties": {
             "article_id": {"type": "keyword"},
@@ -43,22 +49,20 @@ mapping = {
         }
     },
 }
-response = client.indices.create(index=index_name, body=mapping, ignore=400)
+response = client.options(ignore_status=400).indices.create(index=index_name, **mapping)
 print(response)
 
-if "acknowledged" in response:
-    if response["acknowledged"]:
-        print(f"Index created successfully: {response['index']}")
-
-    elif "error" in response:
-        print(f"Error creating index: {response['error']['root_cause']}")
-        print(f"Error Type: {response['error']['type']}")
+if response.get("acknowledged"):
+    print(f"Index created successfully: {response['index']}")
+elif "error" in response:
+    print(f"Error creating index: {response['error']['root_cause']}")
+    print(f"Error Type: {response['error']['type']}")
 
 mapping2 = {
     "settings": {
         "refresh_interval": "300s",
-        "number_of_shards": 5,
-        "number_of_replicas": 3,
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
     },
     "mappings": {
         "properties": {
@@ -102,25 +106,23 @@ mapping2 = {
     },
 }
 
-response = client.indices.create(index="new", body=mapping2, ignore=400)
+response = client.options(ignore_status=400).indices.create(index="new", **mapping2)
 print(response)
 
-if "acknowledged" in response:
-    if response["acknowledged"]:
-        print(f"Index created successfully: {response['index']}")
-
-    elif "error" in response:
-        print(f"Error creating index: {response['error']['root_cause']}")
-        print(f"Error Type: {response['error']['type']}")
+if response.get("acknowledged"):
+    print(f"Index created successfully: {response['index']}")
+elif "error" in response:
+    print(f"Error creating index: {response['error']['root_cause']}")
+    print(f"Error Type: {response['error']['type']}")
 
 
 documents = [
     {
         "body": "This is the body",
-        "id": uuid.uuid4(),
+        "id": str(uuid.uuid4()),
         "language": "ES",
-        "publication_time": datetime.datetime.utcnow(),
-        "stamp_created": datetime.datetime.utcnow(),
+        "publication_time": datetime.datetime.now(datetime.timezone.utc),
+        "stamp_created": datetime.datetime.now(datetime.timezone.utc),
         "title": "Title",
     },
 ]

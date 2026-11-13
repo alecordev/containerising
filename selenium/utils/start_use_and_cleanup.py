@@ -1,24 +1,41 @@
-import time
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "selenium==4.52.0",
+# ]
+# ///
+
+"""Start a standalone Firefox Selenium container, keep it up until Ctrl+C, then clean up."""
+
+import os
 import subprocess
+import time
+
+IMAGE = os.environ.get("SELENIUM_IMAGE", "selenium/standalone-firefox:4.52.0")
+NAME = "firefox-selenium"
 
 
-def main():
+def main() -> None:
     print(
         subprocess.run(
-            'docker run -d -p 4444:4444 -p 7900:7900 --shm-size="2g" --name firefox-selenium selenium/standalone-firefox:4.1.2-20220131',
-            shell=True
+            [
+                "docker", "run", "-d", "--rm",
+                "-p", "4444:4444", "-p", "7900:7900",
+                "--shm-size=2g", "--name", NAME, IMAGE,
+            ],
+            check=True,
         )
     )
     try:
-        print(f"Selenium started in ports 4444 (to use driver.Remote) and 7900 (for VNC)...")
-        while 1:
+        print("Selenium started on ports 4444 (webdriver.Remote) and 7900 (noVNC, password: secret)...")
+        while True:
             time.sleep(1)
     except KeyboardInterrupt:
         print("Detected keyboard interrupt, terminating gracefully...")
     finally:
-        print(f"Cleaning up Docker containers...")
-        print(subprocess.run("docker stop firefox-selenium", shell=True))
-        print(subprocess.run("docker rm firefox-selenium", shell=True))
+        print("Cleaning up Docker containers...")
+        # --rm removes the container as soon as it stops
+        print(subprocess.run(["docker", "stop", NAME]))
 
 
 if __name__ == "__main__":

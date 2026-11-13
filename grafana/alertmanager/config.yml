@@ -1,0 +1,13 @@
+# Minimal Alertmanager config: everything goes to a receiver that does nothing.
+# Add email/slack/webhook configs under `receivers` to get notifications.
+route:
+  receiver: default
+  group_by: ["alertname"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: default
+    # webhook_configs:
+    #   - url: http://example.local/alert

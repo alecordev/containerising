@@ -1,8 +1,9 @@
-version: "3.7"
-
 services:
     selenium:
         build: .
-        command: python app.py
+        environment:
+            TARGET_URL: ${TARGET_URL:-https://www.python.org}
+            OUTPUT_DIR: /output
         volumes:
-            - .:/app
+            - ./output:/output
+        shm_size: 2gb

@@ -1,28 +1,33 @@
-FROM python:3.10 as builder
+# syntax=docker/dockerfile:1
+# API image (FastAPI + uvicorn). Context ignore file: Dockerfile.dockerignore
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+FROM python:3.14-slim-trixie AS builder
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc \
-    libpq-dev
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-COPY ./src/api /app
-COPY requirements-api.txt /app
 
-WORKDIR /app
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements-api.txt
+COPY requirements-api.txt .
+RUN pip install -r requirements-api.txt
 
-FROM python:3.10-slim-bullseye
 
+FROM python:3.14-slim-trixie
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH"
+
+RUN useradd --create-home --uid 1000 app
 COPY --from=builder /opt/venv /opt/venv
-COPY ./src/api /app
 WORKDIR /app
+COPY --chown=app:app src/api/ /app/
 
-ENV PATH="/opt/venv/bin:$PATH"
+USER app
 EXPOSE 8081
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"
 
 CMD ["uvicorn", "api:app", "--host", "0.0.0.0", "--port", "8081"]

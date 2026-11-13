@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pymongo>=4.19,<5",
+#     "mongoengine>=0.29",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
 """
 - Write doc
 - Read doc
@@ -8,7 +17,7 @@
 import helper
 
 mongo = helper.connect()
-tutorial = mongo.db.tutorial
+tutorial = mongo["tutorial"]["tutorial"]
 
 tutorial1 = {
     "title": "Working With JSON Data in Python",

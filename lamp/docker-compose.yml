@@ -1,26 +1,41 @@
-version: '3'
-
 services:
-    php-apache:
-        image: php:7.2.1-apache
-        ports:
-            - 8080:80
-        volumes:
-            - ./www:/var/www/html
-        links:
-            - mariadb
+  php-apache:
+    build:
+      context: .
+      args:
+        PHP_VERSION: ${PHP_VERSION:-8.4}
+    image: lamp-php-apache:${PHP_VERSION:-8.4}
+    restart: unless-stopped
+    ports:
+      - "${WEB_PORT:-8080}:80"
+    volumes:
+      - ./www:/var/www/html
+    environment:
+      DB_HOST: mariadb
+      DB_NAME: ${MARIADB_DATABASE:-testdb}
+      DB_USER: ${MARIADB_USER:-username}
+      DB_PASSWORD: ${MARIADB_PASSWORD:-password}
+    depends_on:
+      mariadb:
+        condition: service_healthy
 
-    mariadb:
-        image: mariadb:10.5
-        volumes:
-            - mariadb:/var/lib/mysql
-        environment:
-            TZ: "Europe/London"
-            MYSQL_ALLOW_EMPTY_PASSWORD: "no"
-            MYSQL_ROOT_PASSWORD: "root"
-            MYSQL_USER: 'username'
-            MYSQL_PASSWORD: 'password'
-            MYSQL_DATABASE: 'testdb'
+  mariadb:
+    image: mariadb:${MARIADB_VERSION:-11.8}
+    restart: unless-stopped
+    volumes:
+      - mariadb:/var/lib/mysql
+    environment:
+      TZ: ${TZ:-UTC}
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:-root}
+      MARIADB_DATABASE: ${MARIADB_DATABASE:-testdb}
+      MARIADB_USER: ${MARIADB_USER:-username}
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:-password}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
 
 volumes:
-    mariadb:
+  mariadb:

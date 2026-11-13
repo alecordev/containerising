@@ -1,39 +1,48 @@
-version: "3.7"
-
 services:
+  mongo:
+    image: mongo:8.0
+    container_name: mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-auth}
+    networks:
+      - mongo-compose-network
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mongosh --quiet -u "$${MONGO_INITDB_ROOT_USERNAME}" -p "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --eval "db.adminCommand('ping').ok" | grep -q 1
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
-    mongo:
-        container_name: mongodb
-        image: mongo:latest
-        environment:
-            - MONGO_INITDB_ROOT_USERNAME=admin
-            - MONGO_INITDB_DATABASE=auth
-            - MONGO_INITDB_ROOT_PASSWORD=admin
-        networks:
-            - mongo-compose-network
-        ports:
-            - '27017:27017'
-        volumes:
-            - ./.docker/data:/data/db
-
-    mongo-express:
-        container_name: mongo-express
-        image: mongo-express
-        depends_on:
-            - mongo
-        networks:
-            - mongo-compose-network
-        environment:
-            - ME_CONFIG_MONGODB_SERVER=mongo
-            - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
-            - ME_CONFIG_MONGODB_ADMINPASSWORD=admin
-            - ME_CONFIG_BASICAUTH_USERNAME=admin
-            - ME_CONFIG_BASICAUTH_PASSWORD=admin
-        ports:
-            - '8081:8081'
-        volumes:
-            - ./.docker/data:/data/db
+  mongo-express:
+    image: mongo-express:1.0.2-20-alpine3.19
+    container_name: mongo-express
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - mongo-compose-network
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongo:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USER:-admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:-admin}
+    ports:
+      - "${MONGO_EXPRESS_PORT:-8081}:8081"
 
 networks:
-    mongo-compose-network:
-        driver: bridge
+  mongo-compose-network:
+    driver: bridge
+
+volumes:
+  mongo-data:
+  mongo-config:

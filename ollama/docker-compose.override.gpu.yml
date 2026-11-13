@@ -1,0 +1,12 @@
+# Override (not a standalone stack, so it is skipped by scripts/smoke.py and lint): give the ollama service access to NVIDIA GPUs.
+# Requires the NVIDIA Container Toolkit on the host (Docker Desktop: enable GPU support / WSL2 CUDA).
+#   docker compose -f docker-compose.yml -f docker-compose.override.gpu.yml up -d
+services:
+    ollama:
+        deploy:
+            resources:
+                reservations:
+                    devices:
+                        - driver: nvidia
+                          count: ${OLLAMA_GPU_COUNT:-all}
+                          capabilities: [gpu]

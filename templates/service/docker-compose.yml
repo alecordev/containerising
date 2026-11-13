@@ -1,0 +1,27 @@
+# myservice - replace this demo (nginx) with the real service.
+# Conventions: see AGENTS.md. No `version:` key, pinned tags, env defaults,
+# overridable host ports, named volumes, a healthcheck that works in the image.
+name: myservice
+
+services:
+    myservice:
+        image: nginx:${NGINX_VERSION:-1.31-alpine-slim}
+        container_name: myservice
+        ports:
+            - "${MYSERVICE_PORT:-8080}:80"
+        environment:
+            TZ: ${TZ:-UTC}
+        volumes:
+            - data:/usr/share/nginx/html
+        healthcheck:
+            # Verify the binary exists in the image first:
+            #   docker run --rm --entrypoint sh <image> -c 'command -v curl wget python3 bash'
+            test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:80/ || exit 1"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 5s
+        restart: unless-stopped
+
+volumes:
+    data:

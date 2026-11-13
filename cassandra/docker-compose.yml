@@ -1,0 +1,29 @@
+services:
+  cassandra:
+    image: cassandra:${CASSANDRA_VERSION:-5.0.9}
+    container_name: cassandra
+    restart: unless-stopped
+    environment:
+      CASSANDRA_CLUSTER_NAME: ${CASSANDRA_CLUSTER_NAME:-dev-cluster}
+      CASSANDRA_DC: ${CASSANDRA_DC:-dc1}
+      CASSANDRA_RACK: ${CASSANDRA_RACK:-rack1}
+      CASSANDRA_ENDPOINT_SNITCH: GossipingPropertyFileSnitch
+      # Keep the JVM small enough for a laptop
+      MAX_HEAP_SIZE: ${CASSANDRA_MAX_HEAP_SIZE:-512M}
+      HEAP_NEWSIZE: ${CASSANDRA_HEAP_NEWSIZE:-128M}
+    ports:
+      - "${CASSANDRA_CQL_PORT:-9042}:9042"
+    volumes:
+      - cassandra-data:/var/lib/cassandra
+    ulimits:
+      memlock: -1
+      nofile: 100000
+    healthcheck:
+      test: ["CMD-SHELL", "cqlsh -e 'DESCRIBE KEYSPACES' > /dev/null 2>&1"]
+      interval: 15s
+      timeout: 10s
+      retries: 20
+      start_period: 90s
+
+volumes:
+  cassandra-data:

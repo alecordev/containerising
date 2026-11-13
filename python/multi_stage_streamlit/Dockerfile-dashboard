@@ -1,28 +1,35 @@
-FROM python:3.10 as builder
+# syntax=docker/dockerfile:1
+# Dashboard image (Streamlit). Context ignore file: Dockerfile-dashboard.dockerignore
 
-ENV PYTHONDONTWRITEBYTECODE 1
-ENV PYTHONUNBUFFERED 1
+FROM python:3.14-slim-trixie AS builder
 
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends gcc \
-    libpq-dev
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1
 
 RUN python -m venv /opt/venv
 ENV PATH="/opt/venv/bin:$PATH"
-COPY ./src/dashboard /app
-COPY requirements-dashboard.txt /app
 
-WORKDIR /app
-RUN pip install --upgrade pip && \
-    pip install --no-cache-dir -r requirements-dashboard.txt
+COPY requirements-dashboard.txt .
+RUN pip install -r requirements-dashboard.txt
 
-FROM python:3.10-slim-bullseye
 
+FROM python:3.14-slim-trixie
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH="/opt/venv/bin:$PATH" \
+    STREAMLIT_BROWSER_GATHER_USAGE_STATS=false \
+    STREAMLIT_SERVER_HEADLESS=true
+
+RUN useradd --create-home --uid 1000 app
 COPY --from=builder /opt/venv /opt/venv
-COPY ./src/dashboard /app
 WORKDIR /app
+COPY --chown=app:app src/dashboard/ /app/
 
-ENV PATH="/opt/venv/bin:$PATH"
+USER app
 EXPOSE 8501
 
-CMD ["streamlit", "run", "dashboard.py"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"
+
+CMD ["streamlit", "run", "dashboard.py", "--server.address=0.0.0.0", "--server.port=8501"]

@@ -1,0 +1,58 @@
+# MLflow tracking server: PostgreSQL metadata store + artifacts stored in a volume
+# and proxied through the server (`--serve-artifacts`), so clients need no S3/volume access.
+services:
+    postgres:
+        image: postgres:18-alpine
+        container_name: mlflow-postgres
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-mlflow}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-mlflow}
+            POSTGRES_DB: ${POSTGRES_DB:-mlflow}
+        volumes:
+            # postgres >= 18 keeps its (versioned) data dir below /var/lib/postgresql
+            - postgres-data:/var/lib/postgresql
+        networks:
+            - mlflow
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    mlflow:
+        build:
+            context: .
+            args:
+                MLFLOW_VERSION: ${MLFLOW_VERSION:-v3.18.0}
+        image: local/mlflow:${MLFLOW_VERSION:-v3.18.0}
+        container_name: mlflow
+        command: >
+            mlflow server
+            --host 0.0.0.0 --port 5000
+            --backend-store-uri postgresql+psycopg2://${POSTGRES_USER:-mlflow}:${POSTGRES_PASSWORD:-mlflow}@postgres:5432/${POSTGRES_DB:-mlflow}
+            --artifacts-destination /mlartifacts
+            --serve-artifacts
+        volumes:
+            - artifacts:/mlartifacts
+        ports:
+            - "${MLFLOW_PORT:-5000}:5000"
+        depends_on:
+            postgres:
+                condition: service_healthy
+        networks:
+            - mlflow
+        healthcheck:
+            test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:5000/health', timeout=4)"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 20s
+        restart: unless-stopped
+
+networks:
+    mlflow:
+
+volumes:
+    postgres-data:
+    artifacts:

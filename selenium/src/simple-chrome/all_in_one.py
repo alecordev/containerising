@@ -1,51 +1,29 @@
-import os
-import io
-import sys
-import zipfile
-import urllib.request
-import tempfile
-import pathlib
+"""Run Chrome locally with no Docker and no manual driver download.
 
-from selenium.webdriver.chrome.options import Options
+Selenium Manager (bundled with selenium >= 4.6) resolves the right chromedriver
+(and Chrome for Testing if Chrome is missing) automatically.
+"""
+
 from selenium import webdriver
-
-
-def prep_chromium():
-    try:
-        url = "https://chromedriver.storage.googleapis.com/100.0.4896.60/chromedriver_linux64.zip"
-        binary = zipfile.ZipFile(io.BytesIO(urllib.request.urlopen(url).read()))
-        binary.extractall(tempfile.gettempdir())
-        print(os.listdir(tempfile.gettempdir()))
-        os.chmod(pathlib.Path(tempfile.gettempdir()).joinpath("chromedriver"), 755)
-
-        print("Retrieved...")
-        os.environ['PATH'] = os.environ['PATH'] + os.pathsep + tempfile.gettempdir()
-    except Exception as e:
-        os.environ['PATH'] = os.environ['PATH'] + os.pathsep + tempfile.gettempdir()
-        print(e)
+from selenium.webdriver.chrome.options import Options
 
 
 def set_chrome_options() -> Options:
-    """Sets chrome options for Selenium.
-    Chrome options for headless browser is enabled.
-    """
-    chrome_options = Options()
-    # chrome_options.add_argument("--headless")  # Enable if you don't want to see the UI
-    chrome_options.add_argument("--no-sandbox")
-    chrome_options.add_argument("--disable-dev-shm-usage")
-    chrome_prefs = {
-        "profile.default_content_settings": {"images": 2},
-    }
-    chrome_options.experimental_options["prefs"] = chrome_prefs
-    # chrome_prefs["profile.default_content_settings"] = {"images": 2}
-    return chrome_options
+    options = Options()
+    # options.add_argument("--headless=new")  # enable if you do not want to see the UI
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
+    options.add_experimental_option(
+        "prefs", {"profile.managed_default_content_settings.images": 2}
+    )
+    return options
 
 
 if __name__ == "__main__":
-    prep_chromium()
     driver = webdriver.Chrome(options=set_chrome_options())
-    # Do stuff with your driver
-    print("Chrome opened")
-    driver.get("http://rugbychampagneweb.com")
-    driver.save_screenshot("screenshot.png")
-    driver.close()
+    try:
+        driver.get("https://www.python.org")
+        print(f"Title: {driver.title}")
+        driver.save_screenshot("screenshot.png")
+    finally:
+        driver.quit()

@@ -1,0 +1,13 @@
+# LiteLLM proxy config: exposes the local Ollama model(s) through an OpenAI-compatible API.
+# Add more entries to `model_list` (any model you `ollama pull`, or hosted providers with keys).
+model_list:
+    - model_name: qwen2.5-0.5b            # name clients use
+      litellm_params:
+          model: ollama_chat/qwen2.5:0.5b # must match OLLAMA_MODEL
+          api_base: os.environ/OLLAMA_API_BASE
+
+general_settings:
+    master_key: os.environ/LITELLM_MASTER_KEY
+
+litellm_settings:
+    drop_params: true

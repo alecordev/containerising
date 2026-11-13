@@ -1,0 +1,34 @@
+services:
+    cloudbeaver:
+        image: dbeaver/cloudbeaver:${CLOUDBEAVER_VERSION:-26.2.4}
+        container_name: cloudbeaver
+        ports:
+            - "${CLOUDBEAVER_PORT:-8978}:8978"
+        environment:
+            # Providing the admin credentials skips the first-run setup wizard.
+            # They are only read on the FIRST start (stored in the workspace volume afterwards).
+            CB_SERVER_NAME: ${CB_SERVER_NAME:-CloudBeaver Dev}
+            CB_SERVER_URL: ${CB_SERVER_URL:-http://localhost:8978}
+            CB_ADMIN_NAME: ${CB_ADMIN_NAME:-cbadmin}
+            CB_ADMIN_PASSWORD: ${CB_ADMIN_PASSWORD:-Admin12345}
+        volumes:
+            # Saved connections, users, scripts and drivers
+            - cloudbeaver-workspace:/opt/cloudbeaver/workspace
+        networks:
+            - dbnet
+        healthcheck:
+            # The image only ships bash (no curl/wget/python): probe with a raw HTTP request
+            test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8978 && printf 'GET / HTTP/1.0\r\nHost: localhost\r\n\r\n' >&3 && head -1 <&3 | grep -q ' 200 '"]
+            interval: 15s
+            timeout: 10s
+            retries: 10
+            start_period: 60s
+        restart: unless-stopped
+
+networks:
+    # Same shared network as the adminer template: see README for attaching other stacks.
+    dbnet:
+        name: ${DBNET_NAME:-dbnet}
+
+volumes:
+    cloudbeaver-workspace:

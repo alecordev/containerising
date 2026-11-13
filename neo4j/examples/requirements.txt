@@ -1,3 +1,2 @@
-neo4j
-py2neo
-neomodel
+neo4j>=6.1,<6.2   # neomodel 7.0 pins the driver to 6.1.x
+neomodel>=7,<8

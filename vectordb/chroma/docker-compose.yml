@@ -1,0 +1,26 @@
+# Chroma: lightweight open-source embedding database, popular for prototyping RAG apps.
+name: chroma
+
+services:
+  chroma:
+    image: chromadb/chroma:${CHROMA_VERSION:-1.5.9}
+    container_name: chroma
+    restart: unless-stopped
+    environment:
+      IS_PERSISTENT: "TRUE"
+      PERSIST_DIRECTORY: /data
+      ANONYMIZED_TELEMETRY: "FALSE"
+    volumes:
+      - chroma-data:/data
+    ports:
+      - "${CHROMA_PORT:-8000}:8000"
+    healthcheck:
+      # The image has bash but no curl/wget: probe the heartbeat over bash's /dev/tcp.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8000 && printf 'GET /api/v2/heartbeat HTTP/1.0\\r\\n\\r\\n' >&3 && read -r status <&3 && [[ $$status == *200* ]]"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  chroma-data:

@@ -1,0 +1,6 @@
+# Whitelist: only what the image needs.
+*
+!requirements.txt
+!workflows.py
+!worker.py
+!starter.py

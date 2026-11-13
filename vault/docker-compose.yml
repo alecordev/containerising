@@ -1,0 +1,57 @@
+# HashiCorp Vault. Local development only.
+#   vault             dev mode (default): in-memory, auto-unsealed, fixed root token, KV v2 at secret/
+#   vault-persistent  non-dev mode (profile `persistent`): file storage in a volume, needs init + unseal
+#
+# Licence note: Vault is under the Business Source License (BSL 1.1) - fine for local use. For a
+# fully open-source drop-in, swap the image for `openbao/openbao` (same API; see README).
+services:
+    vault:
+        image: hashicorp/vault:${VAULT_VERSION:-2.2.2}
+        container_name: vault
+        command: server -dev
+        environment:
+            VAULT_DEV_ROOT_TOKEN_ID: ${VAULT_DEV_ROOT_TOKEN:-root}
+            VAULT_DEV_LISTEN_ADDRESS: 0.0.0.0:8200
+            VAULT_ADDR: http://127.0.0.1:8200
+            VAULT_TOKEN: ${VAULT_DEV_ROOT_TOKEN:-root}
+        cap_add:
+            - IPC_LOCK
+        ports:
+            - "${VAULT_PORT:-8200}:8200"
+        healthcheck:
+            test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8200/v1/sys/health"]
+            interval: 5s
+            timeout: 3s
+            retries: 15
+            start_period: 5s
+        restart: unless-stopped
+
+    vault-persistent:
+        profiles:
+            - persistent
+        image: hashicorp/vault:${VAULT_VERSION:-2.2.2}
+        container_name: vault-persistent
+        # the image entrypoint adds -config=/vault/config for `server`, which loads ./config/vault.hcl
+        command: server
+        environment:
+            VAULT_ADDR: http://127.0.0.1:8200
+        cap_add:
+            - IPC_LOCK
+        ports:
+            - "${VAULT_PERSISTENT_PORT:-8201}:8200"
+        volumes:
+            - ./config:/vault/config:ro
+            - vault-file:/vault/file
+            - vault-logs:/vault/logs
+        healthcheck:
+            # sealed / uninitialised still count as "up" so the container is reachable for `operator init`
+            test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8200/v1/sys/health?uninitcode=200&sealedcode=200&standbyok=true"]
+            interval: 5s
+            timeout: 3s
+            retries: 15
+            start_period: 5s
+        restart: unless-stopped
+
+volumes:
+    vault-file:
+    vault-logs:

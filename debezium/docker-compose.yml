@@ -1,0 +1,128 @@
+# Change data capture: PostgreSQL (logical replication) -> Debezium Connect -> Kafka (KRaft). Local development only.
+# Self-contained: it brings its own single-node Kafka and Postgres, so it does not depend on ../kafka or ../postgresql.
+services:
+    postgres:
+        image: postgres:18-alpine
+        container_name: debezium-postgres
+        # wal_level=logical is what lets Debezium stream row changes (pgoutput plugin)
+        command: ["postgres", "-c", "wal_level=logical", "-c", "max_wal_senders=10", "-c", "max_replication_slots=10"]
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-postgres}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+            POSTGRES_DB: ${POSTGRES_DB:-inventory}
+        volumes:
+            - postgres-data:/var/lib/postgresql
+            - ./init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+        ports:
+            - "${PG_PORT:-5433}:5432"
+        networks:
+            - cdc
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    kafka:
+        image: apache/kafka:${KAFKA_VERSION:-4.4.0}
+        container_name: debezium-kafka
+        hostname: kafka
+        ports:
+            - "${KAFKA_PORT:-9092}:9092"
+        environment:
+            CLUSTER_ID: ${CLUSTER_ID:-MkU3OEVBNTcwNTJENDM2Qk}
+            KAFKA_NODE_ID: 1
+            KAFKA_PROCESS_ROLES: broker,controller
+            KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+            KAFKA_LISTENERS: INTERNAL://:19092,EXTERNAL://:9092,CONTROLLER://:9093
+            KAFKA_ADVERTISED_LISTENERS: INTERNAL://kafka:19092,EXTERNAL://${KAFKA_EXTERNAL_HOST:-localhost}:${KAFKA_PORT:-9092}
+            KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INTERNAL:PLAINTEXT,EXTERNAL:PLAINTEXT,CONTROLLER:PLAINTEXT
+            KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+            KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+            KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+            KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+            KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+            KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+            KAFKA_NUM_PARTITIONS: 1
+        volumes:
+            - kafka-data:/var/lib/kafka/data
+        networks:
+            - cdc
+        healthcheck:
+            test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092 > /dev/null 2>&1"]
+            interval: 15s
+            timeout: 10s
+            retries: 10
+            start_period: 30s
+        restart: unless-stopped
+
+    connect:
+        image: quay.io/debezium/connect:${DEBEZIUM_VERSION:-3.7.1.Final}
+        container_name: debezium-connect
+        environment:
+            BOOTSTRAP_SERVERS: kafka:19092
+            GROUP_ID: debezium
+            CONFIG_STORAGE_TOPIC: debezium_connect_configs
+            OFFSET_STORAGE_TOPIC: debezium_connect_offsets
+            STATUS_STORAGE_TOPIC: debezium_connect_statuses
+            CONFIG_STORAGE_REPLICATION_FACTOR: "1"
+            OFFSET_STORAGE_REPLICATION_FACTOR: "1"
+            STATUS_STORAGE_REPLICATION_FACTOR: "1"
+        ports:
+            - "${CONNECT_PORT:-8083}:8083"
+        depends_on:
+            kafka:
+                condition: service_healthy
+            postgres:
+                condition: service_healthy
+        networks:
+            - cdc
+        healthcheck:
+            test: ["CMD-SHELL", "curl -fsS http://localhost:8083/connectors > /dev/null"]
+            interval: 10s
+            timeout: 5s
+            retries: 12
+            start_period: 30s
+        restart: unless-stopped
+
+    # One-shot: registers (idempotent PUT) the connector from ./connector-config.json, then exits 0.
+    register-connector:
+        image: quay.io/debezium/connect:${DEBEZIUM_VERSION:-3.7.1.Final}
+        container_name: debezium-register
+        entrypoint: ["curl", "-fsS", "-X", "PUT", "-H", "Content-Type: application/json",
+                     "--data", "@/connector-config.json",
+                     "http://connect:8083/connectors/inventory-connector/config"]
+        volumes:
+            - ./connector-config.json:/connector-config.json:ro
+        depends_on:
+            connect:
+                condition: service_healthy
+        networks:
+            - cdc
+        restart: "no"
+
+    # Optional web UI for Kafka Connect (profile `ui`). The UI project is only maintained
+    # up to Debezium 2.5, so expect some rough edges against Connect 3.x.
+    debezium-ui:
+        image: quay.io/debezium/debezium-ui:${DEBEZIUM_UI_VERSION:-2.5}
+        container_name: debezium-ui
+        profiles:
+            - ui
+        environment:
+            KAFKA_CONNECT_URIS: http://connect:8083
+        ports:
+            - "${DEBEZIUM_UI_PORT:-8085}:8080"
+        depends_on:
+            connect:
+                condition: service_healthy
+        networks:
+            - cdc
+        restart: unless-stopped
+
+networks:
+    cdc:
+
+volumes:
+    postgres-data:
+    kafka-data:

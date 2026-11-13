@@ -1,0 +1,15 @@
+services:
+    web:
+        build: .
+        environment:
+            DJANGO_SECRET_KEY: ${DJANGO_SECRET_KEY:-django-insecure-dev-only-change-me}
+            DJANGO_DEBUG: ${DJANGO_DEBUG:-false}
+            DJANGO_ALLOWED_HOSTS: ${DJANGO_ALLOWED_HOSTS:-localhost,127.0.0.1}
+        ports:
+            - "${WEB_PORT:-8000}:8000"
+        volumes:
+            - django-data:/data
+        restart: unless-stopped
+
+volumes:
+    django-data:

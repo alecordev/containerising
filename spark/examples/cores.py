@@ -1,7 +1,21 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pyspark==4.3.0",
+#     "ipython",
+# ]
+# ///
+
+import os
+
 from pyspark.sql import SparkSession
 
 # local[*] means that all cores will be used to run the application
-spark = SparkSession.builder.appName("SparkApp").master("local[*]").getOrCreate()
+spark = (
+    SparkSession.builder.appName("SparkApp")
+    .master(os.getenv("SPARK_MASTER", "local[*]"))
+    .getOrCreate()
+)
 
 df1 = spark.range(2, 10000000, 2)
 df2 = spark.range(2, 10000000, 4)
@@ -13,3 +27,4 @@ step4 = step3.selectExpr("sum(id)")
 result = step4.collect()
 
 print(result)  # 2500000000000
+spark.stop()

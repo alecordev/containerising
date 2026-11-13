@@ -1,0 +1,40 @@
+services:
+    caddy:
+        image: caddy:${CADDY_VERSION:-2.11.9-alpine}
+        container_name: caddy
+        ports:
+            # Container ports equal host ports on purpose: Caddy builds its HTTP->HTTPS
+            # redirect from the port it listens on (see http_port/https_port in the Caddyfile).
+            - "${CADDY_HTTP_PORT:-8080}:${CADDY_HTTP_PORT:-8080}"
+            - "${CADDY_HTTPS_PORT:-8443}:${CADDY_HTTPS_PORT:-8443}"
+            - "${CADDY_HTTPS_PORT:-8443}:${CADDY_HTTPS_PORT:-8443}/udp"   # HTTP/3
+        volumes:
+            - ./Caddyfile:/etc/caddy/Caddyfile:ro
+            - ./site:/srv:ro
+            # Persist the local CA so the root cert you trusted stays valid across restarts
+            - caddy-data:/data
+            - caddy-config:/config
+        environment:
+            CADDY_SITE: ${CADDY_SITE:-app.localhost}
+            CADDY_HTTP_PORT: ${CADDY_HTTP_PORT:-8080}
+            CADDY_HTTPS_PORT: ${CADDY_HTTPS_PORT:-8443}
+        depends_on:
+            - upstream
+        healthcheck:
+            # Admin API listens on localhost:2019 inside the container only
+            test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:2019/config/"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 5s
+        restart: unless-stopped
+
+    # Demo upstream (scratch image: no shell, so no healthcheck). Replace with your own service.
+    upstream:
+        image: traefik/whoami:${WHOAMI_VERSION:-v1.12.0}
+        command: ["--port", "8000", "--name", "upstream"]
+        restart: unless-stopped
+
+volumes:
+    caddy-data:
+    caddy-config:

@@ -1,39 +1,61 @@
-version: "3"
+# Selenium Grid (hub + browser nodes), Selenium 4.52.0.
+#   docker compose up -d                       # hub + chrome + firefox
+#   docker compose --profile edge up -d        # + Edge (linux/amd64 images only)
+#   docker compose up -d --scale chrome=3      # more parallel Chrome sessions
+# Grid UI / WebDriver endpoint: http://localhost:4444
+x-node: &node
+    shm_size: 2gb
+    depends_on:
+        selenium-hub:
+            condition: service_healthy
+    environment: &node-env
+        SE_EVENT_BUS_HOST: selenium-hub
+        SE_EVENT_BUS_PUBLISH_PORT: "4442"
+        SE_EVENT_BUS_SUBSCRIBE_PORT: "4443"
+        SE_NODE_MAX_SESSIONS: ${SE_NODE_MAX_SESSIONS:-1}
+        SE_VNC_PASSWORD: ${SE_VNC_PASSWORD:-secret}
+    healthcheck:
+        test: ["CMD", "curl", "-fsS", "http://localhost:5555/status"]
+        interval: 15s
+        timeout: 5s
+        retries: 5
+        start_period: 15s
+    restart: unless-stopped
+
 services:
-  chrome:
-    image: selenium/node-chrome:4.1.1-20220121
-    shm_size: 2gb
-    depends_on:
-      - selenium-hub
-    environment:
-      - SE_EVENT_BUS_HOST=selenium-hub
-      - SE_EVENT_BUS_PUBLISH_PORT=4442
-      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+    selenium-hub:
+        image: selenium/hub:${SELENIUM_VERSION:-4.52.0}
+        container_name: selenium-hub
+        ports:
+            - "4442:4442"
+            - "4443:4443"
+            - "${GRID_PORT:-4444}:4444"
+        healthcheck:
+            # A hub without nodes reports ready=false, so only check that it answers
+            # (check-grid.sh would deadlock the nodes' depends_on).
+            test: ["CMD", "curl", "-fsS", "-o", "/dev/null", "http://localhost:4444/status"]
+            interval: 15s
+            timeout: 30s
+            retries: 5
+        restart: unless-stopped
 
-  edge:
-    image: selenium/node-edge:4.1.1-20220121
-    shm_size: 2gb
-    depends_on:
-      - selenium-hub
-    environment:
-      - SE_EVENT_BUS_HOST=selenium-hub
-      - SE_EVENT_BUS_PUBLISH_PORT=4442
-      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+    chrome:
+        <<: *node
+        image: selenium/node-chrome:${SELENIUM_VERSION:-4.52.0}
+        # No fixed host ports so the service can be scaled; browse noVNC through `docker compose port`.
+        ports:
+            - "7900"
 
-  firefox:
-    image: selenium/node-firefox:4.1.1-20220121
-    shm_size: 2gb
-    depends_on:
-      - selenium-hub
-    environment:
-      - SE_EVENT_BUS_HOST=selenium-hub
-      - SE_EVENT_BUS_PUBLISH_PORT=4442
-      - SE_EVENT_BUS_SUBSCRIBE_PORT=4443
+    firefox:
+        <<: *node
+        image: selenium/node-firefox:${SELENIUM_VERSION:-4.52.0}
+        ports:
+            - "7900"
 
-  selenium-hub:
-    image: selenium/hub:4.1.1-20220121
-    container_name: selenium-hub
-    ports:
-      - "4442:4442"
-      - "4443:4443"
-      - "4444:4444"
+    edge:
+        <<: *node
+        image: selenium/node-edge:${SELENIUM_VERSION:-4.52.0}
+        platform: linux/amd64  # Microsoft Edge is not published for arm64
+        profiles: ["edge"]
+        ports:
+            - "7900"

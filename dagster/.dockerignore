@@ -1,0 +1,9 @@
+# Build context for ./Dockerfile: only what the image needs (whitelist).
+*
+!Dockerfile
+!requirements.txt
+!dagster.yaml
+!workspace.yaml
+!pipeline/
+**/__pycache__
+**/*.py[cod]

@@ -1,19 +1,63 @@
-version: '3'
+# Apache Spark 4.3 standalone cluster: 1 master + 2 workers (official apache/spark image).
+# Submit from the host with PySpark (see README) against spark://localhost:7077,
+# or inside the cluster: docker compose exec spark-master /opt/spark/bin/spark-submit /opt/spark/examples-py/example_estimate_pi.py
+x-spark-common: &spark-common
+    image: apache/spark:${SPARK_VERSION:-4.3.0-scala2.13-java21-python3-ubuntu}
+    networks:
+        - spark
+    volumes:
+        - ./examples:/opt/spark/examples-py:ro
+    restart: unless-stopped
+
+x-spark-worker: &spark-worker
+    <<: *spark-common
+    environment: &spark-worker-env
+        SPARK_WORKER_CORES: ${SPARK_WORKER_CORES:-2}
+        SPARK_WORKER_MEMORY: ${SPARK_WORKER_MEMORY:-1g}
+    depends_on:
+        spark-master:
+            condition: service_healthy
+
 services:
     spark-master:
-        image: bde2020/spark-master:3.2.0-hadoop3.2
+        <<: *spark-common
         container_name: spark-master
-        ports:
-            - "8080:8080"
-            - "7077:7077"
+        hostname: spark-master
+        command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master --host spark-master --port 7077 --webui-port 8080
         environment:
-            - INIT_DAEMON_STEP=setup_spark
+            SPARK_PUBLIC_DNS: ${SPARK_PUBLIC_DNS:-localhost}
+        ports:
+            - "${SPARK_MASTER_UI_PORT:-8080}:8080"
+            - "${SPARK_MASTER_PORT:-7077}:7077"
+        healthcheck:
+            test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/localhost/8080'"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 15s
+
     spark-worker-1:
-        image: bde2020/spark-worker:3.2.0-hadoop3.2
+        <<: *spark-worker
         container_name: spark-worker-1
-        depends_on:
-            - spark-master
-        ports:
-            - "8081:8081"
+        hostname: spark-worker-1
+        command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker --webui-port 8081 spark://spark-master:7077
         environment:
-            - "SPARK_MASTER=spark://spark-master:7077"
+            <<: *spark-worker-env
+            SPARK_PUBLIC_DNS: ${SPARK_PUBLIC_DNS:-localhost}
+        ports:
+            - "${SPARK_WORKER_1_UI_PORT:-8081}:8081"
+
+    spark-worker-2:
+        <<: *spark-worker
+        container_name: spark-worker-2
+        hostname: spark-worker-2
+        command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker --webui-port 8081 spark://spark-master:7077
+        environment:
+            <<: *spark-worker-env
+            SPARK_PUBLIC_DNS: ${SPARK_PUBLIC_DNS:-localhost}
+        ports:
+            - "${SPARK_WORKER_2_UI_PORT:-8082}:8081"
+
+networks:
+    spark:
+        name: spark

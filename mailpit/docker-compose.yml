@@ -1,0 +1,25 @@
+services:
+    mailpit:
+        image: axllent/mailpit:${MAILPIT_VERSION:-v1.33.1}
+        container_name: mailpit
+        ports:
+            - "${MAILPIT_SMTP_PORT:-1025}:1025"
+            - "${MAILPIT_UI_PORT:-8025}:8025"
+        environment:
+            MP_MAX_MESSAGES: ${MP_MAX_MESSAGES:-5000}
+            MP_DATABASE: /data/mailpit.db
+            MP_SMTP_AUTH_ACCEPT_ANY: ${MP_SMTP_AUTH_ACCEPT_ANY:-1}
+            MP_SMTP_AUTH_ALLOW_INSECURE: ${MP_SMTP_AUTH_ALLOW_INSECURE:-1}
+            TZ: ${TZ:-UTC}
+        volumes:
+            - mailpit-data:/data
+        healthcheck:
+            test: ["CMD", "/mailpit", "readyz"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 5s
+        restart: unless-stopped
+
+volumes:
+    mailpit-data:

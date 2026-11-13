@@ -1,0 +1,87 @@
+# Local LLM stack: Ollama (inference) + Open WebUI (chat UI) + LiteLLM (OpenAI-compatible gateway).
+# Local development only. CPU by default; for NVIDIA GPUs add the override file:
+#   docker compose -f docker-compose.yml -f docker-compose.override.gpu.yml up -d
+services:
+    ollama:
+        image: ollama/ollama:${OLLAMA_VERSION:-0.40.16}
+        container_name: ollama
+        volumes:
+            - ollama-data:/root/.ollama
+        ports:
+            - "${OLLAMA_PORT:-11434}:11434"
+        networks:
+            - llm
+        healthcheck:
+            # the image ships the ollama CLI but neither curl nor wget
+            test: ["CMD", "ollama", "list"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 10s
+        restart: unless-stopped
+
+    # One-shot: pulls the default (small) model into the shared volume, then exits 0.
+    model-pull:
+        image: ollama/ollama:${OLLAMA_VERSION:-0.40.16}
+        container_name: ollama-model-pull
+        entrypoint: ["ollama", "pull", "${OLLAMA_MODEL:-qwen2.5:0.5b}"]
+        environment:
+            OLLAMA_HOST: http://ollama:11434
+        depends_on:
+            ollama:
+                condition: service_healthy
+        networks:
+            - llm
+        restart: "no"
+
+    open-webui:
+        image: ghcr.io/open-webui/open-webui:${OPEN_WEBUI_VERSION:-0.13.3}
+        container_name: open-webui
+        environment:
+            OLLAMA_BASE_URL: http://ollama:11434
+            # dev default: no login screen. Set WEBUI_AUTH=True for a real deployment.
+            WEBUI_AUTH: ${WEBUI_AUTH:-False}
+            WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:-dev-only-change-me}
+            ENABLE_OPENAI_API: "false"
+        volumes:
+            - open-webui-data:/app/backend/data
+        ports:
+            - "${OPEN_WEBUI_PORT:-3000}:8080"
+        depends_on:
+            model-pull:
+                condition: service_completed_successfully
+        networks:
+            - llm
+        # the image defines its own HEALTHCHECK (curl /health)
+        restart: unless-stopped
+
+    litellm:
+        image: ghcr.io/berriai/litellm:${LITELLM_VERSION:-v1.109.1}
+        container_name: litellm
+        command: ["--config", "/app/config.yaml", "--port", "4000"]
+        environment:
+            LITELLM_MASTER_KEY: ${LITELLM_MASTER_KEY:-sk-dev-litellm-key}
+            OLLAMA_API_BASE: http://ollama:11434
+        volumes:
+            - ./litellm_config.yaml:/app/config.yaml:ro
+        ports:
+            - "${LITELLM_PORT:-4000}:4000"
+        depends_on:
+            model-pull:
+                condition: service_completed_successfully
+        networks:
+            - llm
+        healthcheck:
+            test: ["CMD", "python3", "-c", "import urllib.request as u; u.urlopen('http://localhost:4000/health/liveliness', timeout=4)"]
+            interval: 15s
+            timeout: 6s
+            retries: 10
+            start_period: 40s
+        restart: unless-stopped
+
+networks:
+    llm:
+
+volumes:
+    ollama-data:
+    open-webui-data:

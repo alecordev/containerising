@@ -1,0 +1,23 @@
+# Typesense: typo-tolerant search engine with vector search support.
+name: typesense
+
+services:
+  typesense:
+    image: typesense/typesense:${TYPESENSE_VERSION:-30.2}
+    container_name: typesense
+    restart: unless-stopped
+    command: ["--data-dir", "/data", "--api-key=${TYPESENSE_API_KEY:-dev-typesense-key}", "--enable-cors"]
+    volumes:
+      - typesense-data:/data
+    ports:
+      - "${TYPESENSE_PORT:-8108}:8108"
+    healthcheck:
+      # The image has bash but no curl/wget: probe /health over bash's /dev/tcp.
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/127.0.0.1/8108 && printf 'GET /health HTTP/1.0\\r\\n\\r\\n' >&3 && read -r status <&3 && [[ $$status == *200* ]]"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  typesense-data:

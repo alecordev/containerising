@@ -1,0 +1,5 @@
+# Build context: requirements.txt + examples/ only.
+*
+!requirements.txt
+!examples/
+**/__pycache__

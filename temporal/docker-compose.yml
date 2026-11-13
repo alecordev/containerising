@@ -1,0 +1,133 @@
+# Temporal server + UI on PostgreSQL. Local development only.
+# Layout follows the official temporalio/samples-server compose (server + admin-tools schema job).
+# Optional Python worker example under the `worker` profile.
+services:
+    postgres:
+        image: postgres:16-alpine
+        container_name: temporal-postgres
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-temporal}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-temporal}
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+        networks:
+            - temporal
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 10s
+        restart: unless-stopped
+
+    # One-shot job: creates the `temporal` and `temporal_visibility` databases and applies the schemas.
+    setup:
+        image: temporalio/admin-tools:${TEMPORAL_VERSION:-1.32.2}
+        container_name: temporal-setup
+        depends_on:
+            postgres:
+                condition: service_healthy
+        environment:
+            POSTGRES_SEEDS: postgres
+            POSTGRES_USER: ${POSTGRES_USER:-temporal}
+            SQL_PASSWORD: ${POSTGRES_PASSWORD:-temporal}
+            DB_PORT: "5432"
+        entrypoint: ["/bin/sh"]
+        command: ["/scripts/setup-postgres.sh"]
+        volumes:
+            - ./scripts:/scripts:ro
+        networks:
+            - temporal
+        restart: "no"
+
+    temporal:
+        image: temporalio/server:${TEMPORAL_VERSION:-1.32.2}
+        container_name: temporal
+        depends_on:
+            setup:
+                condition: service_completed_successfully
+        environment:
+            DB: postgres12
+            DB_PORT: "5432"
+            POSTGRES_USER: ${POSTGRES_USER:-temporal}
+            POSTGRES_PWD: ${POSTGRES_PASSWORD:-temporal}
+            POSTGRES_SEEDS: postgres
+            BIND_ON_IP: 0.0.0.0
+            DYNAMIC_CONFIG_FILE_PATH: config/dynamicconfig/development-sql.yaml
+        ports:
+            - "${TEMPORAL_PORT:-7233}:7233"
+        volumes:
+            - ./dynamicconfig:/etc/temporal/config/dynamicconfig:ro
+        networks:
+            - temporal
+        healthcheck:
+            test: ["CMD", "nc", "-z", "localhost", "7233"]
+            interval: 5s
+            timeout: 3s
+            retries: 40
+            start_period: 20s
+        restart: unless-stopped
+
+    # One-shot job: waits for the server to be healthy and creates the default namespace.
+    create-namespace:
+        image: temporalio/admin-tools:${TEMPORAL_VERSION:-1.32.2}
+        container_name: temporal-create-namespace
+        depends_on:
+            temporal:
+                condition: service_healthy
+        environment:
+            TEMPORAL_ADDRESS: temporal:7233
+            DEFAULT_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+        entrypoint: ["/bin/sh"]
+        command: ["/scripts/create-namespace.sh"]
+        volumes:
+            - ./scripts:/scripts:ro
+        networks:
+            - temporal
+        restart: "no"
+
+    ui:
+        image: temporalio/ui:${TEMPORAL_UI_VERSION:-2.58.1}
+        container_name: temporal-ui
+        depends_on:
+            create-namespace:
+                condition: service_completed_successfully
+        environment:
+            TEMPORAL_ADDRESS: temporal:7233
+            TEMPORAL_CORS_ORIGINS: http://localhost:${TEMPORAL_UI_PORT:-8233}
+        ports:
+            - "${TEMPORAL_UI_PORT:-8233}:8080"
+        networks:
+            - temporal
+        healthcheck:
+            test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8080/healthz"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 10s
+        restart: unless-stopped
+
+    # Optional example worker (profile `worker`). Start a workflow with:
+    #   docker compose run --rm worker python starter.py
+    worker:
+        profiles:
+            - worker
+        build: ./worker
+        image: temporal-example-worker:1
+        container_name: temporal-worker
+        depends_on:
+            create-namespace:
+                condition: service_completed_successfully
+        environment:
+            TEMPORAL_ADDRESS: temporal:7233
+            TEMPORAL_NAMESPACE: ${TEMPORAL_NAMESPACE:-default}
+        networks:
+            - temporal
+        restart: unless-stopped
+
+networks:
+    temporal:
+        name: temporal-network
+
+volumes:
+    postgres-data:

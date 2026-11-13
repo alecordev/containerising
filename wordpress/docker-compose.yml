@@ -1,30 +1,40 @@
-version: "3.9"
-
 services:
-    db:
-        image: mysql:latest
-        volumes:
-            - ./.docker/db_data:/var/lib/mysql
-        ports:
-            - "3306:3306"
-        restart: always
-        environment:
-            MYSQL_ROOT_PASSWORD: root
-            MYSQL_DATABASE: wordpress
-            MYSQL_USER: wordpress
-            MYSQL_PASSWORD: wordpress
+  db:
+    image: mysql:8.4
+    restart: unless-stopped
+    volumes:
+      - db_data:/var/lib/mysql
+    ports:
+      - "${MYSQL_PORT:-3306}:3306"
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:-root}
+      MYSQL_DATABASE: ${WORDPRESS_DB_NAME:-wordpress}
+      MYSQL_USER: ${WORDPRESS_DB_USER:-wordpress}
+      MYSQL_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wordpress}
+    healthcheck:
+      # -h 127.0.0.1 (TCP): the image's first-boot init server is socket-only, so "localhost" reports healthy too early
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p\"$${MYSQL_ROOT_PASSWORD}\" --silent"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
 
-    wordpress:
-        depends_on:
-            - db
-        image: wordpress:latest
-        volumes:
-            - ./.docker/wp_html:/var/www/html
-        ports:
-            - "8000:80"
-        restart: always
-        environment:
-            WORDPRESS_DB_HOST: db
-            WORDPRESS_DB_USER: wordpress
-            WORDPRESS_DB_PASSWORD: wordpress
-            WORDPRESS_DB_NAME: wordpress
+  wordpress:
+    image: wordpress:php8.4-apache
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    volumes:
+      - wp_html:/var/www/html
+    ports:
+      - "${WORDPRESS_PORT:-8000}:80"
+    environment:
+      WORDPRESS_DB_HOST: db
+      WORDPRESS_DB_USER: ${WORDPRESS_DB_USER:-wordpress}
+      WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:-wordpress}
+      WORDPRESS_DB_NAME: ${WORDPRESS_DB_NAME:-wordpress}
+
+volumes:
+  db_data:
+  wp_html:

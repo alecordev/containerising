@@ -1,98 +1,72 @@
-version: "3.7"
-
+# Prefect 3 server (API + UI) backed by PostgreSQL. Local development only.
+# Replaces the Prefect 1.x Server/Hasura/Apollo stack, which is discontinued.
 services:
-
     postgres:
-        image: "postgres:11"
+        image: postgres:18-alpine
+        container_name: prefect-postgres
         environment:
-            POSTGRES_USER: ${POSTGRES_USER}
-            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-            POSTGRES_DB: ${POSTGRES_DB}
+            POSTGRES_USER: ${POSTGRES_USER:-prefect}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-prefect}
+            POSTGRES_DB: ${POSTGRES_DB:-prefect}
         volumes:
-            - postgres:/var/lib/postgresql/data
+            # postgres >= 18 keeps its (versioned) data dir below /var/lib/postgresql
+            - postgres-data:/var/lib/postgresql
         networks:
-            - prefect-server
-        restart: "always"
-        command:
-            - "postgres"
-            - "-c"
-            - "max_connections=150"
+            - prefect
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
 
-    hasura:
-        image: "hasura/graphql-engine:v1.3.0"
-        command: "graphql-engine serve"
+    server:
+        image: prefecthq/prefect:${PREFECT_VERSION:-3.9.2-python3.13}
+        container_name: prefect-server
+        command: prefect server start --host 0.0.0.0 --port 4200
         environment:
-            HASURA_GRAPHQL_DATABASE_URL: ${DB_CONNECTION_URL}
-            HASURA_GRAPHQL_ENABLE_CONSOLE: "true"
-            HASURA_GRAPHQL_SERVER_PORT: "3000"
-            HASURA_GRAPHQL_QUERY_PLAN_CACHE_SIZE: 100
-            HASURA_GRAPHQL_LOG_LEVEL: "warn"
-        networks:
-            - prefect-server
-        restart: "always"
-        depends_on:
-            - postgres
-
-    graphql:
-        image: "prefecthq/server:${PREFECT_SERVER_TAG:-latest}"
-        command: bash -c "${PREFECT_SERVER_DB_CMD} && python src/prefect_server/services/graphql/server.py"
-        environment:
-            PREFECT_SERVER_DB_CMD: ${PREFECT_SERVER_DB_CMD:-"echo 'DATABASE MIGRATIONS SKIPPED'"}
-            PREFECT_SERVER__DATABASE__CONNECTION_URL: ${DB_CONNECTION_URL}
-            PREFECT_SERVER__HASURA__ADMIN_SECRET: ${PREFECT_SERVER__HASURA__ADMIN_SECRET:-hasura-secret-admin-secret}
-            PREFECT_SERVER__HASURA__HOST: hasura
-        networks:
-            - prefect-server
-        restart: "always"
-        depends_on:
-            - hasura
-
-    towel:
-        image: "prefecthq/server:${PREFECT_SERVER_TAG:-latest}"
-        command: "python src/prefect_server/services/towel/__main__.py"
-        environment:
-            PREFECT_SERVER__HASURA__ADMIN_SECRET: ${PREFECT_SERVER__HASURA__ADMIN_SECRET:-hasura-secret-admin-secret}
-            PREFECT_SERVER__HASURA__HOST: hasura
-        networks:
-            - prefect-server
-        restart: "always"
-        depends_on:
-            - graphql
-
-    apollo:
-        image: "prefecthq/apollo:${PREFECT_SERVER_TAG:-latest}"
+            PREFECT_API_DATABASE_CONNECTION_URL: postgresql+asyncpg://${POSTGRES_USER:-prefect}:${POSTGRES_PASSWORD:-prefect}@postgres:5432/${POSTGRES_DB:-prefect}
+            PREFECT_SERVER_API_HOST: 0.0.0.0
+            # URL the browser uses to reach the API (the UI calls it from your machine)
+            PREFECT_UI_API_URL: http://localhost:${PREFECT_PORT:-4200}/api
+            PREFECT_SERVER_ANALYTICS_ENABLED: "false"
         ports:
-            - "4200:4200"
-        command: bash -c "./post-start.sh && npm run serve"
-        environment:
-            HASURA_API_URL: http://hasura:3000/v1alpha1/graphql
-            PREFECT_API_URL: http://graphql:4201/graphql/
-            PREFECT_API_HEALTH_URL: http://graphql:4201/health
-            PREFECT_SERVER__TELEMETRY__ENABLED: "false"
-            GRAPHQL_SERVICE_HOST: http://graphql
-            GRAPHQL_SERVICE_PORT: 4201
-        networks:
-            - prefect-server
-        restart: "always"
+            - "${PREFECT_PORT:-4200}:4200"
         depends_on:
-            - graphql
-
-    ui:
-        image: "prefecthq/ui:${PREFECT_UI_TAG:-latest}"
-        ports:
-            - "8080:8080"
-        command: "/intercept.sh"
-        environment:
-            PREFECT_SERVER__APOLLO_URL: http://localhost:4200/graphql
+            postgres:
+                condition: service_healthy
         networks:
-            - prefect-server
-        restart: "always"
-        depends_on:
-            - apollo
+            - prefect
+        healthcheck:
+            test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:4200/api/health', timeout=4)"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 30s
+        restart: unless-stopped
 
-volumes:
-    postgres:
+    # Optional: a process worker polling the `default` work pool (profile `worker`).
+    # Create the pool first: docker compose run --rm server prefect work-pool create default --type process
+    worker:
+        image: prefecthq/prefect:${PREFECT_VERSION:-3.9.2-python3.13}
+        container_name: prefect-worker
+        profiles:
+            - worker
+        command: prefect worker start --pool default --type process
+        environment:
+            PREFECT_API_URL: http://server:4200/api
+        volumes:
+            - ./example:/opt/prefect/flows
+        depends_on:
+            server:
+                condition: service_healthy
+        networks:
+            - prefect
+        restart: unless-stopped
 
 networks:
-    prefect-server:
-        name: prefect-server
+    prefect:
+        name: prefect
+
+volumes:
+    postgres-data:

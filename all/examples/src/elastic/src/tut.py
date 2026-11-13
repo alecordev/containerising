@@ -1,8 +1,17 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "elasticsearch[async]>=9.5,<10",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
+import os
 from pprint import pprint
 
 from elasticsearch import Elasticsearch
 
-es = Elasticsearch([{"host": "localhost", "port": 9200}])
+es = Elasticsearch(os.getenv("ELASTICSEARCH_URL", "http://localhost:9200"))
 
 data = [
     {
@@ -53,7 +62,7 @@ data = [
 ]
 
 for a_data in data:
-    res = es.index(index="my-index", body=a_data)
+    res = es.index(index="my-index", document=a_data)
     pprint(res)
 
 
@@ -64,10 +73,11 @@ body = {
         }
     }
 }
-res = es.search(index="my-index", body=body)
+res = es.search(index="my-index", query=body["query"])
 pprint(res)
 
 
+# from elasticsearch.dsl import Q, Search
 # query = Q('match', gender='male') & Q('range', age={'gte': 25})
 # s = Search(using=es, index='my-index').query(query)
 # response = s.execute()

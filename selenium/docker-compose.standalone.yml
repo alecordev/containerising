@@ -1,0 +1,19 @@
+# Single-container Selenium (browser + server): http://localhost:4444, noVNC: http://localhost:7900
+#   docker compose -f docker-compose.standalone.yml up -d
+# Pick the browser with BROWSER=chrome|firefox|edge (edge is amd64 only).
+services:
+    selenium:
+        image: selenium/standalone-${BROWSER:-chrome}:${SELENIUM_VERSION:-4.52.0}
+        shm_size: 2gb
+        ports:
+            - "${GRID_PORT:-4444}:4444"
+            - "${VNC_PORT:-7900}:7900"
+        environment:
+            SE_VNC_PASSWORD: ${SE_VNC_PASSWORD:-secret}
+            SE_NODE_MAX_SESSIONS: ${SE_NODE_MAX_SESSIONS:-1}
+        healthcheck:
+            test: ["CMD", "/opt/bin/check-grid.sh", "--host", "0.0.0.0", "--port", "4444"]
+            interval: 15s
+            timeout: 30s
+            retries: 5
+        restart: unless-stopped

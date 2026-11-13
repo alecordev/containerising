@@ -1,20 +1,27 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "scylla-driver>=3.29,<4",
+# ]
+# ///
+
+import os
 import uuid
 
 from cassandra.cluster import Cluster
-from cassandra.query import SimpleStatement
 
-# Connect to the ScyllaDB cluster
-cluster = Cluster(['localhost'])
+HOSTS = os.getenv("SCYLLA_HOSTS", "localhost").split(",")
+PORT = int(os.getenv("SCYLLA_PORT", "9042"))
+
+cluster = Cluster(HOSTS, port=PORT)
 session = cluster.connect()
 
-# Create a keyspace
 session.execute("""
     CREATE KEYSPACE IF NOT EXISTS my_keyspace
-    WITH replication = {'class': 'SimpleStrategy', 'replication_factor': '1'}
+    WITH replication = {'class': 'NetworkTopologyStrategy', 'replication_factor': '1'}
 """)
-session.set_keyspace('my_keyspace')
+session.set_keyspace("my_keyspace")
 
-# Create a table for the address book
 session.execute("""
     CREATE TABLE IF NOT EXISTS address_book (
         id UUID PRIMARY KEY,
@@ -24,26 +31,16 @@ session.execute("""
     )
 """)
 
-# Insert example entries into the address book
 entries = [
-    {'id': uuid.uuid4(), 'name': 'John Doe', 'email': 'john.doe@example.com', 'phone': '+1-123-456-7890'},
-    {'id': uuid.uuid4(), 'name': 'Jane Smith', 'email': 'jane.smith@example.com', 'phone': '+1-987-654-3210'},
-    {'id': uuid.uuid4(), 'name': 'Alice Johnson', 'email': 'alice.johnson@example.com', 'phone': '+1-555-555-5555'}
+    (uuid.uuid4(), "John Doe", "john.doe@example.com", "+1-123-456-7890"),
+    (uuid.uuid4(), "Jane Smith", "jane.smith@example.com", "+1-987-654-3210"),
+    (uuid.uuid4(), "Alice Johnson", "alice.johnson@example.com", "+1-555-555-5555"),
 ]
-
+insert = session.prepare("INSERT INTO address_book (id, name, email, phone) VALUES (?, ?, ?, ?)")
 for entry in entries:
-    session.execute(
-        """
-        INSERT INTO address_book (id, name, email, phone)
-        VALUES (%s, %s, %s, %s)
-        """,
-        (entry['id'], entry['name'], entry['email'], entry['phone'])
-    )
+    session.execute(insert, entry)
 
-# Read and print all entries in the address book
-rows = session.execute("SELECT * FROM address_book")
-for row in rows:
+for row in session.execute("SELECT * FROM address_book"):
     print(row.id, row.name, row.email, row.phone)
 
-# Close the connection
 cluster.shutdown()

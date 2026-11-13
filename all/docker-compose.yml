@@ -1,175 +1,210 @@
-version: '3.7'
+# Combined local-development stack: RabbitMQ, Redis, Elasticsearch + Kibana,
+# PostgreSQL + pgAdmin, MongoDB + Mongo Express.
+# Everything has defaults, so `docker compose up -d` works without a .env file
+# (see .env.example for the variables). Start a subset with e.g.
+#   docker compose up -d redis postgres
+
+x-restart: &restart
+  restart: unless-stopped
 
 services:
-    rabbitmq:
-        image: rabbitmq:3-management-alpine
-        container_name: rabbitmq
-        volumes:
-            - ./.docker/rabbitmq/etc/:/usr/share/etc/rabbitmq/
-            - ./.docker/rabbitmq/data/:/usr/share/var/lib/rabbitmq/
-            - ./.docker/rabbitmq/logs/:/usr/share/var/log/rabbitmq/
-        environment:
-            RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_ERLANG_COOKIE}
-            RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
-            RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
-        ports:
-            - 5672:5672
-            - 15672:15672
-        networks:
-            internal-rabbit-network:
+  rabbitmq:
+    <<: *restart
+    image: rabbitmq:4.3-management-alpine
+    container_name: rabbitmq
+    hostname: rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-guest}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-guest}
+    volumes:
+      - rabbitmq-data:/var/lib/rabbitmq
+    ports:
+      - "${RABBITMQ_PORT:-5672}:5672"
+      - "${RABBITMQ_MANAGEMENT_PORT:-15672}:15672"
+    networks:
+      - internal-rabbit-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
 
-    redis:
-        image: redis:alpine
-        command: redis-server --requirepass password
-        ports:
-            - "6379:6379"
-        volumes:
-            - ./.docker/redis/data:/var/lib/redis
-            - ./configs/redis.conf:/usr/local/etc/redis/redis.conf
-        environment:
-            - REDIS_REPLICATION_MODE=master
-        deploy:
-            resources:
-                limits:
-                  memory: 512M
-#                reservations:
-#                  memory: 128M
-#        networks:
-#            node_net:
-#                ipv4_address: 172.28.1.2
+  redis:
+    <<: *restart
+    image: redis:8.8-alpine
+    container_name: redis
+    command: ["sh", "-c", "exec redis-server /usr/local/etc/redis/redis.conf --requirepass \"$$REDIS_PASSWORD\""]
+    environment:
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-password}
+      REDISCLI_AUTH: ${REDIS_PASSWORD:-password}
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis-data:/data
+      - ./configs/redis.conf:/usr/local/etc/redis/redis.conf:ro
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
 
-    elasticsearch:
-        image: docker.elastic.co/elasticsearch/elasticsearch:7.12.1
-        container_name: elasticsearch
-        environment:
-            - xpack.security.enabled=false
-            - discovery.type=single-node
-#            - cluster.name=es-docker
-#            - node.name=node1
-            - bootstrap.memory_lock=true
-            - "ES_JAVA_OPTS=-Xms2g -Xmx2g"
-        ulimits:
-            memlock:
-                soft: -1
-                hard: -1
-            nofile:
-                soft: 65536
-                hard: 65536
-        cap_add:
-            - IPC_LOCK
-        volumes:
-            - ./.docker/data/elastic:/usr/share/elasticsearch/data
-        ports:
-            - 9200:9200
-            - 9300:9300
-        networks:
-            internal-elastic-network:
-        deploy:
-            resources:
-                limits:
-                  memory: 4g
-#                reservations:
-#                  memory: 128M
+  elasticsearch:
+    <<: *restart
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-9.5.6}
+    container_name: elasticsearch
+    environment:
+      # Local development only: security (TLS + auth) is disabled
+      - xpack.security.enabled=false
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms${ES_HEAP:-1g} -Xmx${ES_HEAP:-1g}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "${ES_PORT:-9200}:9200"
+    networks:
+      - internal-elastic-network
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
 
-    kibana:
-        container_name: kibana
-        image: docker.elastic.co/kibana/kibana:7.12.1
-        environment:
-            - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-        ports:
-            - 5601:5601
-        depends_on:
-            - elasticsearch
-        networks:
-            internal-elastic-network:
-        deploy:
-            resources:
-                limits:
-                  memory: 1g
-#                reservations:
-#                  memory: 128M
+  kibana:
+    <<: *restart
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION:-9.5.6}
+    container_name: kibana
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "${KIBANA_PORT:-5601}:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - internal-elastic-network
+    deploy:
+      resources:
+        limits:
+          memory: 1g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:5601/api/status >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
-    postgres:
-        container_name: postgres_container
-        image: postgres
-        environment:
-            POSTGRES_USER: ${POSTGRES_USER:-postgres}
-            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-            PGDATA: /data/postgres
-        volumes:
-            - ./.docker/data/postgres:/data/postgres
-        ports:
-            - "5432:5432"
-        networks:
-            - postgres
-        restart: unless-stopped
+  postgres:
+    <<: *restart
+    image: postgres:18.6-alpine
+    container_name: postgres_container
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      # PostgreSQL 18+ images keep PGDATA under /var/lib/postgresql/<major>/docker
+      - postgres-data:/var/lib/postgresql
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    networks:
+      - postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-    pgadmin:
-        container_name: pgadmin_container
-        image: dpage/pgadmin4
-        environment:
-            PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin@pgadmin.org}
-            PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
-            PGADMIN_CONFIG_SERVER_MODE: 'False'
-        volumes:
-            - ./.docker/pgadmin:/root/.pgadmin
-        ports:
-            - "${PGADMIN_PORT:-5050}:80"
-        networks:
-            - postgres
-        restart: unless-stopped
+  pgadmin:
+    <<: *restart
+    image: dpage/pgadmin4:9.19
+    container_name: pgadmin_container
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin@pgadmin.org}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
+    volumes:
+      - pgadmin-data:/var/lib/pgadmin
+    ports:
+      - "${PGADMIN_PORT:-5050}:80"
+    networks:
+      - postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
 
-    mongo:
-        container_name: mongodb
-        image: mongo:4.2
-        environment:
-            - MONGO_INITDB_ROOT_USERNAME=admin
-            - MONGO_INITDB_DATABASE=auth
-            - MONGO_INITDB_ROOT_PASSWORD=admin
-        networks:
-            - mongo-compose-network
-        ports:
-            - '27017:27017'
-        volumes:
-            - ./.docker/data/mongodb:/data/db
+  mongo:
+    <<: *restart
+    image: mongo:8.0
+    container_name: mongodb
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: ${MONGO_USER:-admin}
+      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_PASSWORD:-admin}
+      MONGO_INITDB_DATABASE: ${MONGO_DB:-auth}
+    networks:
+      - mongo-compose-network
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo-data:/data/db
+      - mongo-config:/data/configdb
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - mongosh --quiet -u "$${MONGO_INITDB_ROOT_USERNAME}" -p "$${MONGO_INITDB_ROOT_PASSWORD}" --authenticationDatabase admin --eval "db.adminCommand('ping').ok" | grep -q 1
+      interval: 10s
+      timeout: 10s
+      retries: 5
+      start_period: 20s
 
-    mongo-express:
-        container_name: mongo-express
-        image: mongo-express
-        depends_on:
-            - mongo
-        networks:
-            - mongo-compose-network
-        environment:
-            - ME_CONFIG_MONGODB_SERVER=mongo
-            - ME_CONFIG_MONGODB_ADMINUSERNAME=admin
-            - ME_CONFIG_MONGODB_ADMINPASSWORD=admin
-            - ME_CONFIG_BASICAUTH_USERNAME=admin
-            - ME_CONFIG_BASICAUTH_PASSWORD=admin
-        ports:
-            - '8081:8081'
-        volumes:
-            - ./.docker/data/mongoexpress:/data/db
+  mongo-express:
+    <<: *restart
+    image: mongo-express:1.0.2-20-alpine3.19
+    container_name: mongo-express
+    depends_on:
+      mongo:
+        condition: service_healthy
+    networks:
+      - mongo-compose-network
+    environment:
+      ME_CONFIG_MONGODB_URL: mongodb://${MONGO_USER:-admin}:${MONGO_PASSWORD:-admin}@mongo:27017/
+      ME_CONFIG_BASICAUTH_USERNAME: ${MONGO_EXPRESS_USER:-admin}
+      ME_CONFIG_BASICAUTH_PASSWORD: ${MONGO_EXPRESS_PASSWORD:-admin}
+    ports:
+      - "${MONGO_EXPRESS_PORT:-8081}:8081"
 
 networks:
-    internal-rabbit-network:
-        name: internal-rabbit-network
-        external: false
-    internal-elastic-network:
-        name: internal-elastic-network
-        external: false
-#    node_net:
-#        ipam:
-#            driver: default
-#            config:
-#                -   subnet: 172.28.0.0/16
-    postgres:
-        driver: bridge
-    mongo-compose-network:
-        driver: bridge
+  internal-rabbit-network:
+    name: internal-rabbit-network
+  internal-elastic-network:
+    name: internal-elastic-network
+  postgres:
+    driver: bridge
+  mongo-compose-network:
+    driver: bridge
 
 volumes:
-    elasticsearch-data:
-        driver: local
-    postgres:
-#    pgadmin:
+  rabbitmq-data:
+  redis-data:
+  elasticsearch-data:
+  postgres-data:
+  pgadmin-data:
+  mongo-data:
+  mongo-config:

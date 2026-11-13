@@ -1,0 +1,185 @@
+# Langfuse (LLM observability) self-hosted: web + worker + PostgreSQL + ClickHouse + Redis + MinIO (S3).
+# Adapted from the official docker-compose at https://github.com/langfuse/langfuse (trimmed: no AI gateway,
+# no cloud-provider settings). Local development only: every secret below is a throwaway default.
+x-langfuse-env: &langfuse-env
+    # Docker sets HOSTNAME to the container id and the Node servers bind to it, so nothing (including the
+    # healthchecks on 127.0.0.1 and the published ports) could connect. Bind to all interfaces.
+    HOSTNAME: 0.0.0.0
+    NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
+    DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-postgres}
+    SALT: ${SALT:-dev-only-salt}
+    # 64 hex chars. Generate your own with: python -c "import secrets; print(secrets.token_hex(32))"
+    ENCRYPTION_KEY: ${ENCRYPTION_KEY:-0000000000000000000000000000000000000000000000000000000000000000}
+    TELEMETRY_ENABLED: ${TELEMETRY_ENABLED:-false}
+    CLICKHOUSE_MIGRATION_URL: clickhouse://clickhouse:9000
+    CLICKHOUSE_URL: http://clickhouse:8123
+    CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
+    CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+    CLICKHOUSE_CLUSTER_ENABLED: "false"
+    LANGFUSE_S3_EVENT_UPLOAD_BUCKET: langfuse
+    LANGFUSE_S3_EVENT_UPLOAD_REGION: auto
+    LANGFUSE_S3_EVENT_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+    LANGFUSE_S3_EVENT_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-miniosecret}
+    LANGFUSE_S3_EVENT_UPLOAD_ENDPOINT: http://minio:9000
+    LANGFUSE_S3_EVENT_UPLOAD_FORCE_PATH_STYLE: "true"
+    LANGFUSE_S3_EVENT_UPLOAD_PREFIX: events/
+    LANGFUSE_S3_MEDIA_UPLOAD_BUCKET: langfuse
+    LANGFUSE_S3_MEDIA_UPLOAD_REGION: auto
+    LANGFUSE_S3_MEDIA_UPLOAD_ACCESS_KEY_ID: ${MINIO_ROOT_USER:-minio}
+    LANGFUSE_S3_MEDIA_UPLOAD_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD:-miniosecret}
+    LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT: http://localhost:${MINIO_PORT:-9090}
+    LANGFUSE_S3_MEDIA_UPLOAD_FORCE_PATH_STYLE: "true"
+    LANGFUSE_S3_MEDIA_UPLOAD_PREFIX: media/
+    LANGFUSE_S3_BATCH_EXPORT_ENABLED: "false"
+    REDIS_HOST: redis
+    REDIS_PORT: "6379"
+    REDIS_AUTH: ${REDIS_AUTH:-myredissecret}
+
+x-langfuse-depends: &langfuse-depends
+    postgres:
+        condition: service_healthy
+    clickhouse:
+        condition: service_healthy
+    redis:
+        condition: service_healthy
+    minio:
+        condition: service_healthy
+
+services:
+    langfuse-web:
+        image: docker.langfuse.com/langfuse/langfuse:${LANGFUSE_VERSION:-4.79}
+        container_name: langfuse-web
+        environment:
+            <<: *langfuse-env
+            NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:-dev-only-nextauth-secret}
+            # Bootstraps an org, project, user and API keys on first start (set the INIT_* values empty to disable).
+            LANGFUSE_INIT_ORG_ID: ${LANGFUSE_INIT_ORG_ID:-local-org}
+            LANGFUSE_INIT_ORG_NAME: ${LANGFUSE_INIT_ORG_NAME:-Local Org}
+            LANGFUSE_INIT_PROJECT_ID: ${LANGFUSE_INIT_PROJECT_ID:-local-project}
+            LANGFUSE_INIT_PROJECT_NAME: ${LANGFUSE_INIT_PROJECT_NAME:-Local Project}
+            LANGFUSE_INIT_PROJECT_PUBLIC_KEY: ${LANGFUSE_INIT_PROJECT_PUBLIC_KEY:-pk-lf-local}
+            LANGFUSE_INIT_PROJECT_SECRET_KEY: ${LANGFUSE_INIT_PROJECT_SECRET_KEY:-sk-lf-local}
+            LANGFUSE_INIT_USER_EMAIL: ${LANGFUSE_INIT_USER_EMAIL:-admin@example.com}
+            LANGFUSE_INIT_USER_NAME: ${LANGFUSE_INIT_USER_NAME:-Admin}
+            LANGFUSE_INIT_USER_PASSWORD: ${LANGFUSE_INIT_USER_PASSWORD:-changeme123}
+        ports:
+            - "${LANGFUSE_PORT:-3000}:3000"
+        depends_on: *langfuse-depends
+        networks:
+            - langfuse
+        healthcheck:
+            test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3000/api/public/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 30
+            start_period: 180s   # first start runs the Postgres and ClickHouse migrations (minutes on a slow host)
+        restart: unless-stopped
+
+    langfuse-worker:
+        image: docker.langfuse.com/langfuse/langfuse-worker:${LANGFUSE_VERSION:-4.79}
+        container_name: langfuse-worker
+        environment: *langfuse-env
+        depends_on: *langfuse-depends
+        networks:
+            - langfuse
+        healthcheck:
+            test: ["CMD", "wget", "-qO", "/dev/null", "http://127.0.0.1:3030/api/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 30
+            start_period: 180s   # first start runs the Postgres and ClickHouse migrations (minutes on a slow host)
+        restart: unless-stopped
+
+    postgres:
+        image: postgres:17-alpine
+        container_name: langfuse-postgres
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-postgres}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+            POSTGRES_DB: ${POSTGRES_DB:-postgres}
+            TZ: UTC
+            PGTZ: UTC
+        volumes:
+            - postgres-data:/var/lib/postgresql/data
+        networks:
+            - langfuse
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    clickhouse:
+        image: clickhouse/clickhouse-server:${CLICKHOUSE_VERSION:-26.3.62.3}
+        container_name: langfuse-clickhouse
+        user: "101:101"
+        environment:
+            CLICKHOUSE_DB: default
+            CLICKHOUSE_USER: ${CLICKHOUSE_USER:-clickhouse}
+            CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+        volumes:
+            - clickhouse-data:/var/lib/clickhouse
+            - clickhouse-logs:/var/log/clickhouse-server
+        networks:
+            - langfuse
+        healthcheck:
+            test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:8123/ping || exit 1"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 10s
+        restart: unless-stopped
+
+    redis:
+        image: redis:7.2-alpine
+        container_name: langfuse-redis
+        command: ["redis-server", "--requirepass", "${REDIS_AUTH:-myredissecret}", "--maxmemory-policy", "noeviction"]
+        environment:
+            REDIS_AUTH: ${REDIS_AUTH:-myredissecret}
+        volumes:
+            - redis-data:/data
+        networks:
+            - langfuse
+        healthcheck:
+            test: ["CMD-SHELL", "redis-cli -a \"$$REDIS_AUTH\" --no-auth-warning ping | grep -q PONG"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    # S3-compatible object storage for event uploads and media. The Chainguard image is what the
+    # official Langfuse compose uses; Chainguard's free tier only publishes `latest` (no pinnable tag).
+    minio:
+        image: cgr.dev/chainguard/minio:latest # lint: allow-latest
+        container_name: langfuse-minio
+        entrypoint: sh
+        command: -c 'mkdir -p /data/langfuse && minio server --address ":9000" --console-address ":9001" /data'
+        environment:
+            MINIO_ROOT_USER: ${MINIO_ROOT_USER:-minio}
+            MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-miniosecret}
+        volumes:
+            - minio-data:/data
+        ports:
+            # the browser uploads media directly to this endpoint (see LANGFUSE_S3_MEDIA_UPLOAD_ENDPOINT)
+            - "${MINIO_PORT:-9090}:9000"
+            - "127.0.0.1:${MINIO_CONSOLE_PORT:-9091}:9001"
+        networks:
+            - langfuse
+        healthcheck:
+            test: ["CMD", "mc", "ready", "local"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+            start_period: 5s
+        restart: unless-stopped
+
+networks:
+    langfuse:
+
+volumes:
+    postgres-data:
+    clickhouse-data:
+    clickhouse-logs:
+    minio-data:
+    redis-data:

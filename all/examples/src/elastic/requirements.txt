@@ -1,4 +1,2 @@
-elasticsearch
-elasticsearch[async]
-elasticsearch-dsl
-python-dotenv
+elasticsearch[async]>=9.5,<10
+python-dotenv>=1.2

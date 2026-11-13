@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pymongo>=4.19,<5",
+#     "mongoengine>=0.29",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
 import helper
 
 client = helper.connect()

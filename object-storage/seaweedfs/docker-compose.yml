@@ -1,0 +1,48 @@
+services:
+    seaweedfs:
+        image: chrislusf/seaweedfs:${SEAWEEDFS_VERSION:-4.53}
+        container_name: seaweedfs
+        # One process runs master + volume server + filer + S3 gateway.
+        # The S3 identity file is generated at start-up so the keys come from the environment.
+        entrypoint: ["/bin/sh", "-c"]
+        command:
+            - |
+              printf '{"identities":[{"name":"dev","credentials":[{"accessKey":"%s","secretKey":"%s"}],"actions":["Admin","Read","Write","List","Tagging"]}]}' "$${S3_ACCESS_KEY}" "$${S3_SECRET_KEY}" > /tmp/s3.json
+              exec weed server -dir=/data -master.volumeSizeLimitMB="$${VOLUME_SIZE_LIMIT_MB}" -volume.max=0 \
+                   -filer -s3 -s3.port=8333 -s3.config=/tmp/s3.json -ip=seaweedfs
+        environment:
+            S3_ACCESS_KEY: ${S3_ACCESS_KEY:-devaccesskey}
+            S3_SECRET_KEY: ${S3_SECRET_KEY:-devsecretkey}
+            VOLUME_SIZE_LIMIT_MB: ${SEAWEEDFS_VOLUME_SIZE_LIMIT_MB:-512}
+        ports:
+            - "${SEAWEEDFS_S3_PORT:-8333}:8333"        # S3 API
+            - "${SEAWEEDFS_MASTER_PORT:-9333}:9333"    # master UI
+            - "${SEAWEEDFS_FILER_PORT:-8888}:8888"     # filer UI / HTTP API
+        volumes:
+            - seaweedfs-data:/data
+        healthcheck:
+            # Servers bind to the address given with -ip (the service name), not to localhost.
+            test: ["CMD-SHELL", "wget -q -O /dev/null http://seaweedfs:9333/cluster/status && wget -q -O /dev/null http://seaweedfs:8888/"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 15s
+        restart: unless-stopped
+
+    # AWS CLI preconfigured for this endpoint: docker compose run --rm aws s3 ls
+    aws:
+        profiles: [tools]
+        image: amazon/aws-cli:${AWS_CLI_VERSION:-2.40.1}
+        entrypoint: ["aws"]
+        environment:
+            AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY:-devaccesskey}
+            AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY:-devsecretkey}
+            AWS_DEFAULT_REGION: us-east-1
+            AWS_ENDPOINT_URL: http://seaweedfs:8333
+            AWS_PAGER: ""
+        depends_on:
+            seaweedfs:
+                condition: service_healthy
+
+volumes:
+    seaweedfs-data:

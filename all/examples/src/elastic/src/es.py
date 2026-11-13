@@ -1,6 +1,16 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "elasticsearch[async]>=9.5,<10",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
+import os
+
 from elasticsearch import Elasticsearch
-client = Elasticsearch(hosts=["http://localhost:9200"], use_ssl=False, verify_certs=False)
+
+client = Elasticsearch(os.getenv("ELASTICSEARCH_URL", "http://localhost:9200"))
 
 print(client.ping())
-resp = client.info()
-print(resp)
+print(client.info())

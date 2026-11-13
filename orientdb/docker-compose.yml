@@ -1,26 +1,36 @@
-version: '3'
 services:
-    odb1:
-        image: orientdb:3.2.4
-        command: dserver.sh
-        volumes:
-#            - ./.docker/var/odb1/config:/orientdb/config
-            - ./.docker/var/odb1/databases:/orientdb/databases
-        environment:
-            ORIENTDB_ROOT_PASSWORD: root
-            ORIENTDB_NODE_NAME: odb1
-        ports:
-            - 2480:2480
-            - 2424:2424
+  odb1:
+    image: orientdb:3.2.58
+    command: dserver.sh
+    restart: unless-stopped
+    volumes:
+      - odb1-databases:/orientdb/databases
+    environment:
+      ORIENTDB_ROOT_PASSWORD: ${ORIENTDB_ROOT_PASSWORD:-root}
+      ORIENTDB_NODE_NAME: odb1
+    ports:
+      - "${ORIENTDB_STUDIO_PORT:-2480}:2480"
+      - "${ORIENTDB_BINARY_PORT:-2424}:2424"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://localhost:2480/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 40s
 
-    odb2:
-        image: orientdb:3.2.4
-        command: dserver.sh
-        volumes:
-#            - ./.docker/var/odb2/config:/orientdb/config
-            - ./.docker/var/odb2/databases:/orientdb/databases
-        environment:
-            ORIENTDB_ROOT_PASSWORD: root
-            ORIENTDB_NODE_NAME: odb2
-        depends_on:
-            - odb1
+  odb2:
+    image: orientdb:3.2.58
+    command: dserver.sh
+    restart: unless-stopped
+    volumes:
+      - odb2-databases:/orientdb/databases
+    environment:
+      ORIENTDB_ROOT_PASSWORD: ${ORIENTDB_ROOT_PASSWORD:-root}
+      ORIENTDB_NODE_NAME: odb2
+    depends_on:
+      odb1:
+        condition: service_healthy
+
+volumes:
+  odb1-databases:
+  odb2-databases:

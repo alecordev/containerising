@@ -1,0 +1,11 @@
+# Copy to dynamic/tls.yml after creating certs with mkcert (see README).
+# Traefik watches this directory and reloads automatically.
+tls:
+  certificates:
+    - certFile: /certs/local.pem
+      keyFile: /certs/local-key.pem
+  stores:
+    default:
+      defaultCertificate:
+        certFile: /certs/local.pem
+        keyFile: /certs/local-key.pem

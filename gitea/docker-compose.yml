@@ -1,0 +1,90 @@
+# Gitea (self-hosted Git + CI via Gitea Actions) on PostgreSQL. Local development only.
+# Optional Actions runner under the `runner` profile (needs a registration token, see README).
+#
+# Port note: the web UI defaults to 3001 (3000 is used by grafana/, dagster/, observability/).
+services:
+    postgres:
+        image: postgres:18-alpine
+        container_name: gitea-postgres
+        environment:
+            POSTGRES_USER: ${GITEA_DB_USER:-gitea}
+            POSTGRES_PASSWORD: ${GITEA_DB_PASSWORD:-gitea}
+            POSTGRES_DB: ${GITEA_DB_NAME:-gitea}
+        volumes:
+            # postgres >= 18 keeps its (versioned) data dir below /var/lib/postgresql
+            - postgres-data:/var/lib/postgresql
+        networks:
+            - gitea
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    gitea:
+        image: gitea/gitea:${GITEA_VERSION:-28.3}
+        container_name: gitea
+        environment:
+            USER_UID: "1000"
+            USER_GID: "1000"
+            GITEA__database__DB_TYPE: postgres
+            GITEA__database__HOST: postgres:5432
+            GITEA__database__NAME: ${GITEA_DB_NAME:-gitea}
+            GITEA__database__USER: ${GITEA_DB_USER:-gitea}
+            GITEA__database__PASSWD: ${GITEA_DB_PASSWORD:-gitea}
+            GITEA__server__DOMAIN: localhost
+            GITEA__server__ROOT_URL: http://localhost:${GITEA_HTTP_PORT:-3001}/
+            GITEA__server__SSH_DOMAIN: localhost
+            GITEA__server__SSH_PORT: ${GITEA_SSH_PORT:-2222}
+            # skip the web installer; create the first admin with the CLI (see README)
+            GITEA__security__INSTALL_LOCK: "true"
+            GITEA__service__DISABLE_REGISTRATION: ${GITEA_DISABLE_REGISTRATION:-true}
+            GITEA__actions__ENABLED: "true"
+        ports:
+            - "${GITEA_HTTP_PORT:-3001}:3000"
+            - "${GITEA_SSH_PORT:-2222}:22"
+        volumes:
+            - gitea-data:/data
+        depends_on:
+            postgres:
+                condition: service_healthy
+        networks:
+            - gitea
+        healthcheck:
+            test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/healthz"]
+            interval: 10s
+            timeout: 5s
+            retries: 15
+            start_period: 20s
+        restart: unless-stopped
+
+    # Optional Gitea Actions runner. Mounts the host Docker socket (it starts job containers):
+    # that gives the runner control of your Docker daemon - local use only.
+    runner:
+        profiles:
+            - runner
+        image: gitea/act_runner:${ACT_RUNNER_VERSION:-0.6.1}
+        container_name: gitea-runner
+        environment:
+            GITEA_INSTANCE_URL: http://gitea:3000
+            GITEA_RUNNER_REGISTRATION_TOKEN: ${GITEA_RUNNER_REGISTRATION_TOKEN:-}
+            GITEA_RUNNER_NAME: ${GITEA_RUNNER_NAME:-local-runner}
+            GITEA_RUNNER_LABELS: ${GITEA_RUNNER_LABELS:-ubuntu-latest:docker://gitea/runner-images:ubuntu-latest}
+        volumes:
+            - runner-data:/data
+            - /var/run/docker.sock:/var/run/docker.sock
+        depends_on:
+            gitea:
+                condition: service_healthy
+        networks:
+            - gitea
+        restart: unless-stopped
+
+networks:
+    gitea:
+
+volumes:
+    postgres-data:
+    gitea-data:
+    runner-data:

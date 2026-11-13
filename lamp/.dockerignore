@@ -1,0 +1,3 @@
+# The Dockerfile has no COPY: ./www is bind-mounted at runtime.
+*
+!Dockerfile

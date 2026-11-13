@@ -1,16 +1,22 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pymongo>=4.19,<5",
+# ]
+# ///
+
+import os
 import uuid
 
 import pymongo
 
-# client = pymongo.MongoClient('mongodb://admin:admin@localhost:27017/&authSource=admin')
 client = pymongo.MongoClient(
-    host="localhost", port=27017, username="admin", password="admin", authSource="admin"
+    os.getenv("MONGO_URI", "mongodb://admin:admin@localhost:27017/?authSource=admin")
 )
 
-print(client.list_databases())
+print(list(client.list_databases()))
 collection = client["database"]["collection"]
 print(collection)
-print(client.list_databases())
 
 items = [{"id": str(uuid.uuid4()), "number": 42, "order": i} for i in range(2)]
 

@@ -1,9 +1,18 @@
-import mongoengine
-from mongoengine import Document, ListField, StringField, URLField
-from mongoengine import connect
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pymongo>=4.19,<5",
+#     "mongoengine>=0.29",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
+import os
+
+from mongoengine import Document, ListField, StringField, URLField, connect
 
 # connect(db="tutorials", host="localhost", port=27017, username="admin", password="admin")
-connect(host="localhost", port=27017, username="admin", password="admin", db="tutorial", authentication_source='admin')
+connect(db="tutorial", host=os.getenv("MONGO_URI", "mongodb://admin:admin@localhost:27017/?authSource=admin"))
 
 
 class Tutorial(Document):

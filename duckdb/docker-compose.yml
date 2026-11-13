@@ -1,0 +1,26 @@
+# DuckDB sandbox: an idle container you drive with `docker compose exec duckdb ...`
+# (DuckDB is an in-process library, there is no server to expose).
+# Database files and exports live in the `duckdb-data` volume (/work/data) and survive container removal.
+# ./examples is bind-mounted read-only so you can edit scripts without rebuilding.
+services:
+    duckdb:
+        build:
+            context: .
+            args:
+                DUCKDB_VERSION: ${DUCKDB_VERSION:-2.0.0}
+                PYTHON_VERSION: ${PYTHON_VERSION:-3.14}
+        image: local/duckdb:${DUCKDB_VERSION:-2.0.0}
+        container_name: duckdb
+        command: ["sleep", "infinity"]
+        volumes:
+            - duckdb-data:/work/data
+            - ./examples:/work/examples:ro
+        healthcheck:
+            test: ["CMD", "duckdb", "-c", "SELECT 1"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
+
+volumes:
+    duckdb-data:

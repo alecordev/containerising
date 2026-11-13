@@ -1,10 +1,20 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "elasticsearch[async]>=9.5,<10",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
+import os
+
 from elasticsearch import Elasticsearch
 
-es_client = Elasticsearch()
+es_client = Elasticsearch(os.getenv("ELASTICSEARCH_URL", "http://localhost:9200"))
 
 configurations = {
     "settings": {
-        "index": {"number_of_replicas": 2},
+        "index": {"number_of_replicas": 0},
         "analysis": {
             "filter": {
                 "ngram_filter": {
@@ -51,7 +61,7 @@ configurations = {
     },
 }
 
-resp = es_client.indices.create(index="laptops-demo", body=configurations, ignore=400)
+resp = es_client.options(ignore_status=400).indices.create(index="laptops-demo", **configurations)
 print(resp)
 
 resp = es_client.indices.put_alias(index="laptops-demo", name="laptops")
@@ -82,7 +92,7 @@ doc = {
         {"attribute_name": "storage", "attribute_value": "256GB"},
     ],
 }
-resp = es_client.index(index="laptops-demo", id=1, body=doc)
+resp = es_client.index(index="laptops-demo", id=1, document=doc)
 print("Write document with specific id")
 print(resp)
 
@@ -97,7 +107,7 @@ search_query = {
         }
     }
 }
-resp = es_client.search(index="laptops-demo", body=search_query)
+resp = es_client.search(index="laptops-demo", query=search_query["query"])
 print("Search name HP")
 print(resp)
 
@@ -108,6 +118,6 @@ search_query = {
         }
     }
 }
-resp = es_client.search(index="laptops-demo", body=search_query)
+resp = es_client.search(index="laptops-demo", query=search_query["query"])
 print("Search name.ngrams HP")
 print(resp)

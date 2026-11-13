@@ -1,0 +1,35 @@
+# NATS server with JetStream (persistence) and the HTTP monitoring endpoint.
+# The optional `nats-box` service (profile `tools`) is a CLI toolbox already pointed at the server.
+name: nats
+
+services:
+  nats:
+    image: nats:${NATS_VERSION:-2.15.3-alpine}
+    container_name: nats
+    restart: unless-stopped
+    command: ["-js", "-sd", "/data", "-m", "8222"]
+    volumes:
+      - nats-data:/data
+    ports:
+      - "${NATS_PORT:-4222}:4222"             # client connections
+      - "${NATS_MONITOR_PORT:-8222}:8222"     # HTTP monitoring (/healthz, /varz, /jsz)
+    healthcheck:
+      # Alpine's busybox wget; a plain GET (not --spider) is used on purpose.
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8222/healthz | grep -q ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  nats-box:
+    image: natsio/nats-box:${NATS_BOX_VERSION:-0.20.2}
+    profiles: ["tools"]
+    environment:
+      NATS_URL: nats://nats:4222
+    depends_on:
+      nats:
+        condition: service_healthy
+    # `docker compose --profile tools run --rm nats-box nats ...` (or `... nats-box sh` for a shell)
+
+volumes:
+  nats-data:

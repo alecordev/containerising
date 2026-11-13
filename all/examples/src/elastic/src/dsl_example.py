@@ -1,8 +1,18 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "elasticsearch[async]>=9.5,<10",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
 from datetime import datetime
-from elasticsearch_dsl import Document, Date, Integer, Keyword, Text, connections
+import os
+
+from elasticsearch.dsl import Date, Document, Integer, Keyword, Text, connections
 
 # Define a default Elasticsearch client
-connections.create_connection(hosts=["localhost"])
+connections.create_connection(hosts=[os.getenv("ELASTICSEARCH_URL", "http://localhost:9200")])
 
 
 class Article(Document):
@@ -15,7 +25,8 @@ class Article(Document):
     class Index:
         name = "blog"
         settings = {
-            "number_of_shards": 2,
+            "number_of_shards": 1,
+            "number_of_replicas": 0,
         }
 
     def save(self, **kwargs):

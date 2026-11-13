@@ -1,0 +1,52 @@
+# Metabase (open-source BI) with a PostgreSQL application database. Local development only.
+services:
+    postgres:
+        image: postgres:18-alpine
+        container_name: metabase-postgres
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-metabase}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-metabase}
+            POSTGRES_DB: ${POSTGRES_DB:-metabase}
+        volumes:
+            # postgres >= 18 keeps its (versioned) data dir below /var/lib/postgresql
+            - postgres-data:/var/lib/postgresql
+        networks:
+            - metabase
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    metabase:
+        image: metabase/metabase:${METABASE_VERSION:-v0.65.4}
+        container_name: metabase
+        environment:
+            MB_DB_TYPE: postgres
+            MB_DB_HOST: postgres
+            MB_DB_PORT: "5432"
+            MB_DB_DBNAME: ${POSTGRES_DB:-metabase}
+            MB_DB_USER: ${POSTGRES_USER:-metabase}
+            MB_DB_PASS: ${POSTGRES_PASSWORD:-metabase}
+            JAVA_TIMEZONE: ${TZ:-UTC}
+        ports:
+            - "${METABASE_PORT:-3000}:3000"
+        depends_on:
+            postgres:
+                condition: service_healthy
+        networks:
+            - metabase
+        healthcheck:
+            test: ["CMD-SHELL", "curl -fsS http://localhost:3000/api/health | grep -q ok"]
+            interval: 15s
+            timeout: 5s
+            retries: 20
+            start_period: 60s
+        restart: unless-stopped
+
+networks:
+    metabase:
+
+volumes:
+    postgres-data:

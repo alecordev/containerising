@@ -1,18 +1,31 @@
 services:
-    postgresql-pgvector:
-        build:
-          context: .
-          dockerfile: Dockerfile
-        container_name: postgres-pgvector
-        ports:
-            - "5432:5432"
-        environment:
-            - POSTGRES_DB=postgres
-            - POSTGRES_USER=postgres
-            - POSTGRES_PASSWORD=postgres
-            - DATABASE_HOST=${DB_HOST:-localhost}
-        volumes:
-            - ./.docker/postgres/data:/var/lib/postgresql/data
-            - ./init.sql:/docker-entrypoint-initdb.d/init.sql
-            - ./vector_extension.sql:/docker-entrypoint-initdb.d/0-vector_extension.sql
-        restart: unless-stopped
+  postgresql-pgvector:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        POSTGRES_VERSION: "18.6"
+        PGVECTOR_VERSION: v0.8.7
+    image: postgres-pgvector:18.6-v0.8.7
+    container_name: postgres-pgvector
+    restart: unless-stopped
+    ports:
+      - "${PG_PORT:-5432}:5432"
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      # PostgreSQL 18+ images keep PGDATA under /var/lib/postgresql/<major>/docker
+      - pgdata:/var/lib/postgresql
+      # init scripts run in alphabetical order: extension first, then your SQL
+      - ./vector_extension.sql:/docker-entrypoint-initdb.d/0-vector_extension.sql:ro
+      - ./init.sql:/docker-entrypoint-initdb.d/1-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  pgdata:

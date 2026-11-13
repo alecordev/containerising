@@ -1,0 +1,28 @@
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:${MSSQL_VERSION:-2025-CU9-GDR1-ubuntu-24.04}
+    container_name: sqlserver
+    restart: unless-stopped
+    environment:
+      # Setting ACCEPT_EULA=Y means you accept the SQL Server licence terms (Developer edition is free for non-production use).
+      ACCEPT_EULA: ${ACCEPT_EULA:-Y}
+      MSSQL_PID: ${MSSQL_PID:-Developer}
+      # Must be 8+ characters with upper, lower, digits and symbols or the server refuses to start.
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:-Str0ng!Passw0rd}
+      MSSQL_MEMORY_LIMIT_MB: ${MSSQL_MEMORY_LIMIT_MB:-2048}
+      MSSQL_AGENT_ENABLED: ${MSSQL_AGENT_ENABLED:-false}
+      TZ: ${TZ:-UTC}
+    ports:
+      - "${MSSQL_PORT:-1433}:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    healthcheck:
+      # sqlcmd lives in mssql-tools18 (the old /opt/mssql-tools path was removed); -C trusts the self-signed cert
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -C -S localhost -U sa -P \"$$MSSQL_SA_PASSWORD\" -Q 'SELECT 1' -b -o /dev/null"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
+
+volumes:
+  sqlserver-data:

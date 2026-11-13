@@ -1,0 +1,18 @@
+# Trino: single node (coordinator + worker) with the built-in tpch benchmark data and an in-memory catalog.
+# Add more catalogs by dropping `<name>.properties` files into ./catalog (see README).
+services:
+    trino:
+        image: trinodb/trino:${TRINO_VERSION:-484}
+        container_name: trino
+        ports:
+            - "${TRINO_PORT:-8080}:8080"
+        volumes:
+            - ./catalog:/etc/trino/catalog:ro
+        healthcheck:
+            # script shipped in the image: succeeds once the server accepts queries
+            test: ["CMD", "/usr/lib/trino/bin/health-check"]
+            interval: 10s
+            timeout: 5s
+            retries: 12
+            start_period: 30s
+        restart: unless-stopped

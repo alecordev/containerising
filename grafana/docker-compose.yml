@@ -1,110 +1,168 @@
-# https://dev.to/project42/install-grafana-influxdb-telegraf-using-docker-compose-56e9
-# https://github.com/vegasbrianc/prometheus
-version: "3"
+# Monitoring stack: Grafana + InfluxDB 2 + Telegraf + Prometheus + Alertmanager (+ cAdvisor, optional).
+# Local development only. Credentials come from .env (see .env.example), defaults are throwaway values.
+#
+# SECURITY: the `host-metrics` profile (cadvisor, telegraf-host) bind-mounts the host's /, /sys, /proc,
+# /etc and the Docker socket. That gives those containers broad read access (the socket is root-equivalent).
+# It is OFF by default and works on Linux hosts only. Enable with: docker compose --profile host-metrics up -d
+#
+# Run: docker compose up -d
+x-monitoring: &monitoring
+    networks:
+        - monitoring
+    restart: unless-stopped
 
 services:
-
     grafana:
-        image: grafana/grafana
+        <<: *monitoring
+        image: grafana/grafana:${GRAFANA_VERSION:-13.2.6}
         container_name: grafana
-        restart: always
         ports:
-            - 3000:3000
-        networks:
-            - monitoring
+            - "${GRAFANA_PORT:-3000}:3000"
+        environment:
+            GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+            GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+            GF_USERS_ALLOW_SIGN_UP: "false"
+            # Consumed by provisioning/datasources/datasources.yml
+            INFLUXDB_ORG: ${INFLUXDB_ORG:-monitoring}
+            INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-telegraf}
+            INFLUXDB_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN:-dev-only-influx-admin-token}
         volumes:
-            - ./grafana:/vol01/Docker/monitoring
+            - grafana-data:/var/lib/grafana
+            - ./provisioning:/etc/grafana/provisioning:ro
+        depends_on:
+            - influxdb
+            - prometheus
+        healthcheck:
+            test: ["CMD-SHELL", "wget -q --spider http://localhost:3000/api/health || curl -fs http://localhost:3000/api/health > /dev/null"]
+            interval: 15s
+            timeout: 5s
+            retries: 5
+            start_period: 20s
 
     influxdb:
-        image: influxdb
+        <<: *monitoring
+        image: influxdb:${INFLUXDB_VERSION:-2.9}
         container_name: influxdb
-        restart: always
         ports:
-            - 8086:8086
-            - 8082:8082
-            - 8083:8083
-            - 8089:8089/udp
-        networks:
-            - monitoring
+            - "${INFLUXDB_PORT:-8086}:8086"
+        environment:
+            DOCKER_INFLUXDB_INIT_MODE: setup
+            DOCKER_INFLUXDB_INIT_USERNAME: ${INFLUXDB_USER:-admin}
+            DOCKER_INFLUXDB_INIT_PASSWORD: ${INFLUXDB_PASSWORD:-adminadmin}
+            DOCKER_INFLUXDB_INIT_ORG: ${INFLUXDB_ORG:-monitoring}
+            DOCKER_INFLUXDB_INIT_BUCKET: ${INFLUXDB_BUCKET:-telegraf}
+            DOCKER_INFLUXDB_INIT_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN:-dev-only-influx-admin-token}
         volumes:
-            - ./influxdb:/vol01/Docker/monitoring
-    #        environment:
-    #            - INFLUXDB_DB=telegraf
-    #            - INFLUXDB_USER=telegraf
-    #            - INFLUXDB_ADMIN_ENABLED=true
-    #            - INFLUXDB_ADMIN_USER=admin
-    #            - INFLUXDB_ADMIN_PASSWORD=admin
+            - influxdb-data:/var/lib/influxdb2
+            - influxdb-config:/etc/influxdb2
+        healthcheck:
+            test: ["CMD", "influx", "ping"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 15s
 
     telegraf:
-        image: telegraf
+        <<: *monitoring
+        image: telegraf:${TELEGRAF_VERSION:-1.40-alpine}
         container_name: telegraf
-        restart: always
-        extra_hosts:
-            - "influxdb:192.168.0.110"
+        environment:
+            INFLUXDB_URL: http://influxdb:8086
+            INFLUXDB_ORG: ${INFLUXDB_ORG:-monitoring}
+            INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-telegraf}
+            INFLUXDB_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN:-dev-only-influx-admin-token}
+        volumes:
+            - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
+        depends_on:
+            influxdb:
+                condition: service_healthy
+
+    # Same as `telegraf` but reads the HOST's /proc, /sys, /etc and the Docker socket (Linux only).
+    telegraf-host:
+        <<: *monitoring
+        image: telegraf:${TELEGRAF_VERSION:-1.40-alpine}
+        container_name: telegraf-host
+        profiles:
+            - host-metrics
         environment:
             HOST_PROC: /rootfs/proc
             HOST_SYS: /rootfs/sys
             HOST_ETC: /rootfs/etc
+            INFLUXDB_URL: http://influxdb:8086
+            INFLUXDB_ORG: ${INFLUXDB_ORG:-monitoring}
+            INFLUXDB_BUCKET: ${INFLUXDB_BUCKET:-telegraf}
+            INFLUXDB_ADMIN_TOKEN: ${INFLUXDB_ADMIN_TOKEN:-dev-only-influx-admin-token}
         volumes:
             - ./telegraf.conf:/etc/telegraf/telegraf.conf:ro
             - /var/run/docker.sock:/var/run/docker.sock:ro
             - /sys:/rootfs/sys:ro
             - /proc:/rootfs/proc:ro
             - /etc:/rootfs/etc:ro
+        depends_on:
+            influxdb:
+                condition: service_healthy
 
     prometheus:
-        image: prom/prometheus:v2.1.0
-        volumes:
-            - ./prometheus/:/etc/prometheus/
-            - ./prometheus_data:/prometheus
+        <<: *monitoring
+        image: prom/prometheus:${PROMETHEUS_VERSION:-v3.16.0}
+        container_name: prometheus
         command:
-            - '--config.file=/etc/prometheus/prometheus.yml'
-            - '--storage.tsdb.path=/prometheus'
-            - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-            - '--web.console.templates=/usr/share/prometheus/consoles'
+            - "--config.file=/etc/prometheus/prometheus.yml"
+            - "--storage.tsdb.path=/prometheus"
+            - "--web.enable-lifecycle"
+        volumes:
+            - ./prometheus:/etc/prometheus:ro
+            - prometheus-data:/prometheus
         ports:
-            - 9090:9090
-        links:
-            - cadvisor:cadvisor
-            - alertmanager:alertmanager
-        #      - pushgateway:pushgateway
+            - "${PROMETHEUS_PORT:-9090}:9090"
         depends_on:
-            - cadvisor
-        #      - pushgateway
-        networks:
-            - monitoring
-        restart: always
+            - alertmanager
+        healthcheck:
+            test: ["CMD", "wget", "-q", "--spider", "http://localhost:9090/-/healthy"]
+            interval: 15s
+            timeout: 5s
+            retries: 5
 
     alertmanager:
-        image: prom/alertmanager
-        ports:
-            - 9093:9093
-        volumes:
-            - ./alertmanager/:/etc/alertmanager/
-        networks:
-            - monitoring
-        restart: always
+        <<: *monitoring
+        image: prom/alertmanager:${ALERTMANAGER_VERSION:-v0.35.0}
+        container_name: alertmanager
         command:
-            - '--config.file=/etc/alertmanager/config.yml'
-            - '--storage.path=/alertmanager'
+            - "--config.file=/etc/alertmanager/config.yml"
+            - "--storage.path=/alertmanager"
+        volumes:
+            - ./alertmanager:/etc/alertmanager:ro
+            - alertmanager-data:/alertmanager
+        ports:
+            - "${ALERTMANAGER_PORT:-9093}:9093"
+        healthcheck:
+            test: ["CMD", "wget", "-q", "--spider", "http://localhost:9093/-/healthy"]
+            interval: 15s
+            timeout: 5s
+            retries: 5
 
+    # Container metrics for Prometheus (needs host mounts -> profile `host-metrics`, Linux only).
     cadvisor:
-        image: google/cadvisor
+        <<: *monitoring
+        image: ghcr.io/google/cadvisor:${CADVISOR_VERSION:-v0.60.6}
+        container_name: cadvisor
+        profiles:
+            - host-metrics
         volumes:
             - /:/rootfs:ro
-            - /var/run:/var/run:rw
+            - /var/run:/var/run:ro
             - /sys:/sys:ro
             - /var/lib/docker/:/var/lib/docker:ro
         ports:
-            - 8080:8080
-        networks:
-            - monitoring
-        restart: always
-        deploy:
-            mode: global
+            - "${CADVISOR_PORT:-8088}:8080"
 
 networks:
     monitoring:
+        name: monitoring
+
 volumes:
-    grafana-volume:
-    influxdb-volume:
+    grafana-data:
+    influxdb-data:
+    influxdb-config:
+    prometheus-data:
+    alertmanager-data:

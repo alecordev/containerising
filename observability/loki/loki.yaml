@@ -1,0 +1,40 @@
+# Loki single binary, filesystem storage, native OTLP ingestion (POST /otlp/v1/logs). Dev only.
+auth_enabled: false
+
+server:
+  http_listen_port: 3100
+  grpc_listen_port: 9096
+  log_level: warn
+
+common:
+  instance_addr: 127.0.0.1
+  path_prefix: /loki
+  storage:
+    filesystem:
+      chunks_directory: /loki/chunks
+      rules_directory: /loki/rules
+  replication_factor: 1
+  ring:
+    kvstore:
+      store: inmemory
+
+schema_config:
+  configs:
+    - from: "2024-04-01"
+      store: tsdb
+      object_store: filesystem
+      schema: v13
+      index:
+        prefix: index_
+        period: 24h
+
+limits_config:
+  # required for OTLP ingestion (trace_id, span_id, resource attributes are structured metadata)
+  allow_structured_metadata: true
+  volume_enabled: true
+
+pattern_ingester:
+  enabled: true
+
+analytics:
+  reporting_enabled: false

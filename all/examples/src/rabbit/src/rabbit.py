@@ -1,3 +1,12 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "amqpstorm>=3.1",
+#     "pika>=1.4",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
 import os
 import json
 import time
@@ -11,15 +20,15 @@ from dotenv import find_dotenv, load_dotenv
 load_dotenv(find_dotenv())
 
 
-RABBITMQ_HOST = os.getenv("RABBITMQ_HOST")
-RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT"))
-RABBITMQ_USERNAME = os.getenv("RABBITMQ_USERNAME")
-RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
+RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
+RABBITMQ_USERNAME = os.getenv("RABBITMQ_USERNAME", "guest")
+RABBITMQ_PASSWORD = os.getenv("RABBITMQ_PASSWORD", "guest")
 
-RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE")
-RABBITMQ_EXCHANGE_TYPE = os.getenv("RABBITMQ_EXCHANGE_TYPE")
-RABBITMQ_QUEUE_NAME = os.getenv("RABBITMQ_QUEUE_NAME")
-RABBITMQ_ROUTING_KEY = os.getenv("RABBITMQ_ROUTING_KEY")
+RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "test")
+RABBITMQ_EXCHANGE_TYPE = os.getenv("RABBITMQ_EXCHANGE_TYPE", "topic")
+RABBITMQ_QUEUE_NAME = os.getenv("RABBITMQ_QUEUE_NAME", "test")
+RABBITMQ_ROUTING_KEY = os.getenv("RABBITMQ_ROUTING_KEY", "test")
 
 
 class RPCClient:
@@ -194,16 +203,6 @@ class Service:
 
 
 def send_message():
-    RABBITMQ_HOST = os.environ.get("RABBITMQ_HOST")
-    RABBITMQ_PORT = int(os.environ.get("RABBITMQ_PORT"))
-    RABBITMQ_USERNAME = os.environ.get("RABBITMQ_USERNAME")
-    RABBITMQ_PASSWORD = os.environ.get("RABBITMQ_PASSWORD")
-
-    RABBITMQ_EXCHANGE = os.environ.get("RABBITMQ_EXCHANGE")
-    RABBITMQ_EXCHANGE_TYPE = os.environ.get("RABBITMQ_EXCHANGE_TYPE")
-    RABBITMQ_QUEUE_NAME = os.environ.get("RABBITMQ_QUEUE_NAME")
-    RABBITMQ_ROUTING_KEY = os.environ.get("RABBITMQ_ROUTING_KEY")
-
     rabbitmq_client = RabbitMQClient(
         hostname=RABBITMQ_HOST,
         port=RABBITMQ_PORT,
@@ -222,7 +221,7 @@ def send_message():
         queue_name="test",
         body=json.dumps(
             {
-                "date": str(datetime.datetime.utcnow()),
+                "date": str(datetime.datetime.now(datetime.timezone.utc)),
                 "object_name": "start_job",
                 "id": str(uuid.uuid4()),
             }

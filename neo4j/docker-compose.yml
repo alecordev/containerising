@@ -1,18 +1,31 @@
-version: '3'
-
 services:
-    neo4j:
-        image: neo4j:latest
-        network_mode: "bridge"
-        ports:
-            - "7474:7474"
-            - "7687:7687"
-        environment:
-            - NEO4J_dbms_security_procedures_unrestricted=apoc.*
-            - NEO4J_apoc_import_file_enabled=true
-            - NEO4J_dbms_shell_enabled=true
-            - NEO4J_AUTH=neo4j/admin
-        volumes:
-            - ./.docker/plugins:/plugins
-            - ./.docker/data:/data
-            - ./.docker/import:/import
+  neo4j:
+    image: neo4j:2026.10-community
+    container_name: neo4j
+    restart: unless-stopped
+    ports:
+      - "${NEO4J_HTTP_PORT:-7474}:7474"   # browser
+      - "${NEO4J_BOLT_PORT:-7687}:7687"   # bolt
+    environment:
+      # Neo4j requires a password of at least 8 characters
+      NEO4J_AUTH: neo4j/${NEO4J_PASSWORD:-password}
+      NEO4J_PLUGINS: '["apoc"]'
+      NEO4J_dbms_security_procedures_unrestricted: apoc.*
+      NEO4J_apoc_import_file_enabled: "true"
+      NEO4J_server_memory_heap_max__size: ${NEO4J_HEAP_MAX:-1G}
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+      - neo4j-plugins:/plugins
+      - ./.docker/import:/import
+    healthcheck:
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p \"$${NEO4J_AUTH#neo4j/}\" 'RETURN 1' >/dev/null 2>&1 || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+volumes:
+  neo4j-data:
+  neo4j-logs:
+  neo4j-plugins:

@@ -1,0 +1,24 @@
+services:
+  cockroach:
+    image: cockroachdb/cockroach:${COCKROACH_VERSION:-v26.4.0}
+    container_name: cockroach
+    restart: unless-stopped
+    # Single node, insecure (no TLS, no passwords): local development only.
+    # Single-node dev clusters do not need a license key.
+    command: start-single-node --insecure --accept-sql-without-tls --http-addr=0.0.0.0:8080
+    environment:
+      COCKROACH_DATABASE: ${COCKROACH_DATABASE:-app}
+    ports:
+      - "${COCKROACH_SQL_PORT:-26257}:26257"
+      - "${COCKROACH_UI_PORT:-8080}:8080"
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+    healthcheck:
+      test: ["CMD-SHELL", "cockroach sql --insecure --host=localhost:26257 -e 'SELECT 1' > /dev/null"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  cockroach-data:

@@ -1,0 +1,44 @@
+# Local, offline copy of Wikipedia served by Kiwix (kiwix-serve): browse and full-text search.
+# `docker compose up -d --wait` downloads the selected snapshots (WIKI_DATASETS) into ./data, verifies
+# their SHA-256, then starts the server. The same tool runs on the host: python prep/wiki.py --help
+name: wikipedia
+
+services:
+    downloader:
+        build:
+            context: .
+            target: downloader
+            args:
+                PYTHON_VERSION: ${PYTHON_VERSION:-3.14}
+        image: containerising/wikipedia-downloader:local
+        # Docker Desktop (Windows/macOS) ignores bind-mount ownership. On Linux create ./data yourself and
+        # set WIKI_UID/WIKI_GID to your ids (id -u / id -g).
+        user: "${WIKI_UID:-10001}:${WIKI_GID:-10001}"
+        environment:
+            WIKI_DATASETS: ${WIKI_DATASETS:-sample}
+            WIKI_MIRROR: ${WIKI_MIRROR:-https://download.kiwix.org/zim/wikipedia/}
+            WIKI_INSECURE: ${WIKI_INSECURE:-0}
+            HTTP_PROXY: ${HTTP_PROXY:-}
+            HTTPS_PROXY: ${HTTPS_PROXY:-}
+            NO_PROXY: ${NO_PROXY:-}
+        volumes:
+            - ${WIKI_DATA_DIR:-./data}:/data
+        restart: "no"
+
+    kiwix:
+        build:
+            context: .
+            target: server
+            args:
+                KIWIX_VERSION: ${KIWIX_VERSION:-3.8.2}
+        image: containerising/wikipedia-kiwix:local
+        container_name: wikipedia-kiwix
+        command: ["*.zim"]
+        ports:
+            - "${WIKI_PORT:-8099}:8080"
+        volumes:
+            - ${WIKI_DATA_DIR:-./data}:/data:ro
+        depends_on:
+            downloader:
+                condition: service_completed_successfully
+        restart: unless-stopped

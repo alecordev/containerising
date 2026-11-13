@@ -1,32 +1,32 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "selenium==4.52.0",
+# ]
+# ///
+
+"""Use a Grid / standalone container that is already running (see ../../docker-compose*.yml)."""
+
+import os
 import time
-import subprocess
+
 from selenium import webdriver
+from selenium.webdriver.firefox.options import Options
+
+GRID_URL = os.environ.get("GRID_URL", "http://localhost:4444")
 
 
-def main():
-    print(
-        subprocess.run(
-            'docker run -d -p 4444:4444 -p 7900:7900 --shm-size="2g" --name firefox-selenium selenium/standalone-firefox:4.1.2-20220131',
-            shell=True,
-        )
-    )
-    driver = webdriver.Remote(command_executor="http://localhost:4444")
-
+def main() -> None:
+    driver = webdriver.Remote(command_executor=GRID_URL, options=Options())
     try:
         driver.implicitly_wait(30)
         driver.maximize_window()
-        driver.get("http://www.python.org")
+        driver.get("https://www.python.org")
         assert "Python" in driver.title
-
-        driver.get("http://rugbychampagneweb.com")
-        time.sleep(5)
-        driver.get("http://artswit.com")
-        time.sleep(10)
-
+        driver.get("https://example.com")
+        time.sleep(2)
     finally:
         driver.quit()
-        print(subprocess.run("docker stop firefox-selenium", shell=True))
-        print(subprocess.run("docker rm firefox-selenium", shell=True))
 
 
 if __name__ == "__main__":

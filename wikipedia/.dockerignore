@@ -1,0 +1,4 @@
+# Whitelist only what the images need. Crucially excludes data/ (ZIM files are tens of GB).
+*
+!Dockerfile
+!prep/wiki.py

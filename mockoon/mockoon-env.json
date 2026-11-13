@@ -1,0 +1,96 @@
+{
+    "uuid": "6f0a3a54-5b8f-4a63-9a32-1d2c8d1a0001",
+    "lastMigration": 33,
+    "name": "Demo API",
+    "endpointPrefix": "",
+    "latency": 0,
+    "port": 3000,
+    "hostname": "0.0.0.0",
+    "folders": [],
+    "routes": [
+        {
+            "uuid": "6f0a3a54-5b8f-4a63-9a32-1d2c8d1a0101",
+            "type": "http",
+            "documentation": "Static JSON",
+            "method": "get",
+            "endpoint": "hello",
+            "responses": [
+                {
+                    "uuid": "6f0a3a54-5b8f-4a63-9a32-1d2c8d1a0201",
+                    "body": "{\n  \"message\": \"Hello from Mockoon\"\n}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [{ "key": "Content-Type", "value": "application/json" }],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true,
+                    "crudKey": "id",
+                    "callbacks": []
+                }
+            ],
+            "responseMode": null,
+            "streamingMode": null,
+            "streamingInterval": 0
+        },
+        {
+            "uuid": "6f0a3a54-5b8f-4a63-9a32-1d2c8d1a0102",
+            "type": "http",
+            "documentation": "Templated response: echoes the :id path parameter and generates fake data",
+            "method": "get",
+            "endpoint": "api/users/:id",
+            "responses": [
+                {
+                    "uuid": "6f0a3a54-5b8f-4a63-9a32-1d2c8d1a0202",
+                    "body": "{\n  \"id\": {{urlParam 'id'}},\n  \"name\": \"{{faker 'person.fullName'}}\"\n}",
+                    "latency": 0,
+                    "statusCode": 200,
+                    "label": "",
+                    "headers": [{ "key": "Content-Type", "value": "application/json" }],
+                    "bodyType": "INLINE",
+                    "filePath": "",
+                    "databucketID": "",
+                    "sendFileAsBody": false,
+                    "rules": [],
+                    "rulesOperator": "OR",
+                    "disableTemplating": false,
+                    "fallbackTo404": false,
+                    "default": true,
+                    "crudKey": "id",
+                    "callbacks": []
+                }
+            ],
+            "responseMode": null,
+            "streamingMode": null,
+            "streamingInterval": 0
+        }
+    ],
+    "rootChildren": [
+        { "type": "route", "uuid": "6f0a3a54-5b8f-4a63-9a32-1d2c8d1a0101" },
+        { "type": "route", "uuid": "6f0a3a54-5b8f-4a63-9a32-1d2c8d1a0102" }
+    ],
+    "proxyMode": false,
+    "proxyHost": "",
+    "proxyRemovePrefix": false,
+    "tlsOptions": {
+        "enabled": false,
+        "type": "CERT",
+        "pfxPath": "",
+        "certPath": "",
+        "keyPath": "",
+        "caPath": "",
+        "passphrase": ""
+    },
+    "cors": true,
+    "headers": [{ "key": "Content-Type", "value": "application/json" }],
+    "proxyReqHeaders": [{ "key": "", "value": "" }],
+    "proxyResHeaders": [{ "key": "", "value": "" }],
+    "data": [],
+    "callbacks": []
+}

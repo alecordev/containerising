@@ -1,0 +1,26 @@
+# Meilisearch: typo-tolerant, instant search engine. Development mode.
+name: meilisearch
+
+services:
+  meilisearch:
+    image: getmeili/meilisearch:${MEILI_VERSION:-v1.56.2}
+    container_name: meilisearch
+    restart: unless-stopped
+    environment:
+      # In MEILI_ENV=production a master key of >= 16 bytes is mandatory.
+      MEILI_ENV: ${MEILI_ENV:-development}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-dev-master-key-change-me-16b}
+      MEILI_NO_ANALYTICS: "true"
+    volumes:
+      - meili-data:/meili_data
+    ports:
+      - "${MEILI_PORT:-7700}:7700"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:7700/health | grep -q available"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+
+volumes:
+  meili-data:

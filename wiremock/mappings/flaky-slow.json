@@ -1,0 +1,8 @@
+{
+    "request": { "method": "GET", "url": "/slow" },
+    "response": {
+        "status": 200,
+        "body": "finally",
+        "fixedDelayMilliseconds": 1500
+    }
+}

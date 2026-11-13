@@ -1,13 +1,23 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "amqpstorm>=3.1",
+#     "pika>=1.4",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
 import json
 import random
 
+import rabbit
 from rabbit import RabbitMQClient
 
 rabbitmq_client = RabbitMQClient(
-    hostname="localhost",
-    port=5672,
-    username="guest",
-    password="guest",
+    hostname=rabbit.RABBITMQ_HOST,
+    port=rabbit.RABBITMQ_PORT,
+    username=rabbit.RABBITMQ_USERNAME,
+    password=rabbit.RABBITMQ_PASSWORD,
 )
 
 rabbitmq_client.setup_bindings(

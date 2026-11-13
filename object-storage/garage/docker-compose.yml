@@ -1,0 +1,72 @@
+x-garage-env: &garage-env
+    # All dev-only values. rpc secret must be 64 hex chars; the access key is "GK" + 24 hex, the secret key 64 hex.
+    GARAGE_RPC_SECRET: ${GARAGE_RPC_SECRET:-1799bccfd7411eddcf9ebd316bc1f5287ad12a68094e1c6ac96f2c8ed7fd0d6f}
+    GARAGE_ADMIN_TOKEN: ${GARAGE_ADMIN_TOKEN:-dev-admin-token}
+    GARAGE_METRICS_TOKEN: ${GARAGE_METRICS_TOKEN:-dev-metrics-token}
+
+services:
+    garage:
+        build:
+            context: .
+            args:
+                GARAGE_VERSION: ${GARAGE_VERSION:-v2.5.0}
+        image: garage-dev:${GARAGE_VERSION:-v2.5.0}
+        container_name: garage
+        hostname: garage
+        command: ["garage", "server"]
+        environment: *garage-env
+        ports:
+            - "${GARAGE_S3_PORT:-3900}:3900"     # S3 API
+            - "${GARAGE_WEB_PORT:-3902}:3902"    # static website hosting
+            - "${GARAGE_ADMIN_PORT:-3903}:3903"  # admin API / metrics
+        volumes:
+            - ./garage.toml:/etc/garage.toml:ro
+            - garage-meta:/var/lib/garage/meta
+            - garage-data:/var/lib/garage/data
+        healthcheck:
+            # Admin API health: 200 once the node is up and the cluster layout is applied (503 before)
+            test: ["CMD", "curl", "-fsS", "http://localhost:3903/health"]
+            interval: 5s
+            timeout: 5s
+            retries: 20
+            start_period: 5s
+        restart: unless-stopped
+
+    # One-shot bootstrap: layout, key, bucket. Exits 0 when done and is safe to re-run.
+    garage-init:
+        image: garage-dev:${GARAGE_VERSION:-v2.5.0}
+        pull_policy: never
+        depends_on:
+            garage:
+                condition: service_started
+        entrypoint: ["garage-init"]
+        environment:
+            <<: *garage-env
+            GARAGE_ACCESS_KEY: ${GARAGE_ACCESS_KEY:-GK31c2f218a2e44f485b94239e}
+            GARAGE_SECRET_KEY: ${GARAGE_SECRET_KEY:-b892c0665f0ada8a4755dae98baa3b133590e11dae3bcc1f9d769d67f16c3835}
+            GARAGE_BUCKET: ${GARAGE_BUCKET:-dev}
+            GARAGE_CAPACITY: ${GARAGE_CAPACITY:-1G}
+        volumes:
+            - ./garage.toml:/etc/garage.toml:ro
+            # `garage node id` reads the node key from the metadata dir (read-only is enough)
+            - garage-meta:/var/lib/garage/meta:ro
+        restart: "no"
+
+    # AWS CLI preconfigured for this endpoint: docker compose run --rm aws s3 ls
+    aws:
+        profiles: [tools]
+        image: amazon/aws-cli:${AWS_CLI_VERSION:-2.40.1}
+        entrypoint: ["aws"]
+        environment:
+            AWS_ACCESS_KEY_ID: ${GARAGE_ACCESS_KEY:-GK31c2f218a2e44f485b94239e}
+            AWS_SECRET_ACCESS_KEY: ${GARAGE_SECRET_KEY:-b892c0665f0ada8a4755dae98baa3b133590e11dae3bcc1f9d769d67f16c3835}
+            AWS_DEFAULT_REGION: garage
+            AWS_ENDPOINT_URL: http://garage:3900
+            AWS_PAGER: ""
+        depends_on:
+            garage-init:
+                condition: service_completed_successfully
+
+volumes:
+    garage-meta:
+    garage-data:

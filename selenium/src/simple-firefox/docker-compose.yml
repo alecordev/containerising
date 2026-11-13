@@ -1,8 +1,9 @@
-version: "3.9"
-
 services:
     seleniumfirefox:
         build: .
-        command: python app.py
+        environment:
+            TARGET_URL: ${TARGET_URL:-https://www.python.org}
+            OUTPUT_DIR: /output
         volumes:
-            - ./app:/app
+            - ./output:/output
+        shm_size: 2gb

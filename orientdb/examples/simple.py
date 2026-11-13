@@ -1,16 +1,24 @@
-import pyorient
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "requests>=2.32",
+# ]
+# ///
 
-username = "root"
-password = "root"
+import os
 
-client = pyorient.OrientDB("localhost", 2424)
-session_id = client.connect(username, password)
+import requests
 
-print("SessionID=", session_id)
-db_name = "GratefulDeadConcerts"
+URL = os.getenv("ORIENTDB_URL", "http://localhost:2480")
+ROOT_PASSWORD = os.getenv("ORIENTDB_ROOT_PASSWORD", "root")
+DB_NAME = "GratefulDeadConcerts"
 
-if client.db_exists(db_name, pyorient.STORAGE_TYPE_MEMORY):
-    print("Database", db_name, "exists")
-    client.db_open(db_name, username, password)
+resp = requests.get(f"{URL}/listDatabases", timeout=10)
+resp.raise_for_status()
+databases = resp.json()["databases"]
+print("Databases:", databases)
+
+if DB_NAME in databases:
+    print("Database", DB_NAME, "exists")
 else:
-    print("Database", db_name, "doesn't exist")
+    print("Database", DB_NAME, "doesn't exist")

@@ -1,35 +1,27 @@
-FROM python:3.9
+# syntax=docker/dockerfile:1
+# Headless Firefox ESR (Debian) + geckodriver, resolved by Selenium Manager at build time.
+FROM python:3.14-slim-trixie
 
-ENV DEBIAN_FRONTEND noninteractive
-ENV GECKODRIVER_VER v0.30.0
-ENV FIREFOX_VER 96.0
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1 \
+    PIP_NO_CACHE_DIR=1 \
+    FIREFOX_BIN=/usr/bin/firefox-esr \
+    SE_CACHE_PATH=/opt/selenium-cache
 
-RUN set -x \
-   && apt update \
-   && apt upgrade -y \
-   && apt install -y \
-       firefox-esr \
-   && pip install  \
-       requests \
-       selenium
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends firefox-esr fonts-liberation \
+    && rm -rf /var/lib/apt/lists/*
 
-# Add latest FireFox
-RUN set -x \
-   && apt install -y \
-       libx11-xcb1 \
-       libdbus-glib-1-2 \
-   && curl -sSLO https://download-installer.cdn.mozilla.net/pub/firefox/releases/${FIREFOX_VER}/linux-x86_64/en-US/firefox-${FIREFOX_VER}.tar.bz2 \
-   && tar -jxf firefox-* \
-   && mv firefox /opt/ \
-   && chmod 755 /opt/firefox \
-   && chmod 755 /opt/firefox/firefox
+COPY requirements.txt .
+# Pre-download geckodriver into SE_CACHE_PATH so containers need no extra download at runtime.
+RUN pip install -r requirements.txt \
+    && python -c "from selenium.webdriver.common.selenium_manager import SeleniumManager; print(SeleniumManager().binary_paths(['--browser', 'firefox', '--browser-path', '/usr/bin/firefox-esr']))" \
+    && chmod -R a+rwX /opt/selenium-cache
 
-# Add geckodriver
-RUN set -x \
-   && curl -sSLO https://github.com/mozilla/geckodriver/releases/download/${GECKODRIVER_VER}/geckodriver-${GECKODRIVER_VER}-linux64.tar.gz \
-   && tar zxf geckodriver-*.tar.gz \
-   && mv geckodriver /usr/bin/
-
-COPY ./app /app
+RUN useradd --create-home --uid 1000 app
 WORKDIR /app
-#CMD python main.py
+COPY --chown=app:app ./app /app
+USER app
+
+CMD ["python", "app.py"]

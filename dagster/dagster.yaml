@@ -1,0 +1,23 @@
+# Instance config (copied to $DAGSTER_HOME). Run/event/schedule storage lives in Postgres.
+storage:
+  postgres:
+    postgres_db:
+      username:
+        env: DAGSTER_PG_USERNAME
+      password:
+        env: DAGSTER_PG_PASSWORD
+      hostname:
+        env: DAGSTER_PG_HOST
+      db_name:
+        env: DAGSTER_PG_DB
+      port: 5432
+
+# Queue runs in the daemon; at most N concurrent runs.
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: QueuedRunCoordinator
+  config:
+    max_concurrent_runs: 4
+
+telemetry:
+  enabled: false

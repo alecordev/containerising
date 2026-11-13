@@ -1,40 +1,47 @@
-version: '3.5'
-
 services:
   postgres:
     container_name: postgres_container
-    image: postgres
+    image: postgres:18.6-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      PGDATA: /data/postgres
     volumes:
-       - ./data:/data/postgres
+      # PostgreSQL 18+ images keep PGDATA under /var/lib/postgresql/<major>/docker
+      - pgdata:/var/lib/postgresql
     ports:
-      - "5432:5432"
+      - "${PG_PORT:-5432}:5432"
     networks:
       - postgres
-    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   pgadmin:
     container_name: pgadmin_container
-    image: dpage/pgadmin4
+    image: dpage/pgadmin4:9.19
+    restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: ${PGADMIN_DEFAULT_EMAIL:-pgadmin@pgadmin.org}
       PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_DEFAULT_PASSWORD:-admin}
-      PGADMIN_CONFIG_SERVER_MODE: 'False'
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+      PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED: "False"
     volumes:
-       - ./pgadmin:/root/.pgadmin
+      - pgadmin:/var/lib/pgadmin
     ports:
       - "${PGADMIN_PORT:-5050}:80"
     networks:
       - postgres
-    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
 
 networks:
   postgres:
     driver: bridge
 
 volumes:
-    postgres:
-    pgadmin:
+  pgdata:
+  pgadmin:

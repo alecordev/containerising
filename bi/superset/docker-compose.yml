@@ -1,0 +1,102 @@
+# Apache Superset: PostgreSQL metadata DB + Redis cache + an init one-shot (migrations, admin user, roles).
+# Local development only: every secret below is a throwaway default.
+x-superset-env: &superset-env
+    SUPERSET_SECRET_KEY: ${SUPERSET_SECRET_KEY:-dev-only-change-me-dev-only-change-me-dev-only}
+    SUPERSET_DATABASE_URI: postgresql+psycopg2://${POSTGRES_USER:-superset}:${POSTGRES_PASSWORD:-superset}@postgres:5432/${POSTGRES_DB:-superset}
+    REDIS_URL: redis://redis:6379
+
+x-superset-build: &superset-build
+    context: .
+    args:
+        SUPERSET_VERSION: ${SUPERSET_VERSION:-6.1.0}
+
+services:
+    postgres:
+        image: postgres:18-alpine
+        container_name: superset-postgres
+        environment:
+            POSTGRES_USER: ${POSTGRES_USER:-superset}
+            POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-superset}
+            POSTGRES_DB: ${POSTGRES_DB:-superset}
+        volumes:
+            # postgres >= 18 keeps its (versioned) data dir below /var/lib/postgresql
+            - postgres-data:/var/lib/postgresql
+        networks:
+            - superset
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    redis:
+        image: redis:8.8-alpine
+        container_name: superset-redis
+        volumes:
+            - redis-data:/data
+        networks:
+            - superset
+        healthcheck:
+            test: ["CMD", "redis-cli", "ping"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    # One-shot: apply DB migrations, create the admin user (idempotent) and initialise roles/permissions, then exit 0.
+    superset-init:
+        build: *superset-build
+        image: local/superset:${SUPERSET_VERSION:-6.1.0}
+        container_name: superset-init
+        command:
+            - /bin/sh
+            - -c
+            - >-
+                superset db upgrade &&
+                (superset fab create-admin
+                --username "$$SUPERSET_ADMIN_USER" --password "$$SUPERSET_ADMIN_PASSWORD"
+                --firstname Superset --lastname Admin --email "$$SUPERSET_ADMIN_EMAIL"
+                || echo "admin user already exists") &&
+                superset init
+        environment:
+            <<: *superset-env
+            SUPERSET_ADMIN_USER: ${SUPERSET_ADMIN_USER:-admin}
+            SUPERSET_ADMIN_PASSWORD: ${SUPERSET_ADMIN_PASSWORD:-admin}
+            SUPERSET_ADMIN_EMAIL: ${SUPERSET_ADMIN_EMAIL:-admin@superset.local}
+        volumes:
+            - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+        depends_on:
+            postgres:
+                condition: service_healthy
+            redis:
+                condition: service_healthy
+        networks:
+            - superset
+        restart: "no"
+
+    superset:
+        build: *superset-build
+        image: local/superset:${SUPERSET_VERSION:-6.1.0}
+        container_name: superset
+        environment: *superset-env
+        volumes:
+            - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+            - superset-home:/app/superset_home
+        ports:
+            - "${SUPERSET_PORT:-8088}:8088"
+        depends_on:
+            superset-init:
+                condition: service_completed_successfully
+        networks:
+            - superset
+        # the image defines its own HEALTHCHECK (curl http://localhost:8088/health)
+        restart: unless-stopped
+
+networks:
+    superset:
+
+volumes:
+    postgres-data:
+    redis-data:
+    superset-home:

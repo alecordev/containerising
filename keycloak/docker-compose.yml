@@ -1,0 +1,71 @@
+# Keycloak (start-dev) on PostgreSQL with an auto-imported demo realm. Local development only:
+# HTTP, no hostname config, dev caches. Do not use `start-dev` in production.
+services:
+    postgres:
+        image: postgres:18-alpine
+        container_name: keycloak-postgres
+        environment:
+            POSTGRES_USER: ${KC_DB_USERNAME:-keycloak}
+            POSTGRES_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
+            POSTGRES_DB: ${KC_DB_NAME:-keycloak}
+        volumes:
+            # postgres >= 18 keeps its (versioned) data dir below /var/lib/postgresql
+            - postgres-data:/var/lib/postgresql
+        networks:
+            - keycloak
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    keycloak:
+        image: quay.io/keycloak/keycloak:${KEYCLOAK_VERSION:-26.8.2}
+        container_name: keycloak
+        command: ["start-dev", "--import-realm"]
+        environment:
+            KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+            KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+            KC_DB: postgres
+            KC_DB_URL: jdbc:postgresql://postgres:5432/${KC_DB_NAME:-keycloak}
+            KC_DB_USERNAME: ${KC_DB_USERNAME:-keycloak}
+            KC_DB_PASSWORD: ${KC_DB_PASSWORD:-keycloak}
+            # health + metrics are served on the management port (9000)
+            KC_HEALTH_ENABLED: "true"
+            KC_METRICS_ENABLED: "true"
+            KC_HTTP_ENABLED: "true"
+            # Public (browser-facing) URL and issuer. Server-side clients in other containers may
+            # still reach Keycloak by any name (e.g. http://keycloak:8080, host.docker.internal)
+            # because the back channel is dynamic. Keep KEYCLOAK_HOSTNAME in sync with KEYCLOAK_PORT.
+            KC_HOSTNAME: ${KEYCLOAK_HOSTNAME:-http://localhost:8080}
+            KC_HOSTNAME_BACKCHANNEL_DYNAMIC: "true"
+        ports:
+            - "${KEYCLOAK_PORT:-8080}:8080"
+            - "${KEYCLOAK_MANAGEMENT_PORT:-9000}:9000"
+        volumes:
+            - ./realm:/opt/keycloak/data/import:ro
+        depends_on:
+            postgres:
+                condition: service_healthy
+        networks:
+            - keycloak
+        healthcheck:
+            # The image has bash but neither curl nor wget: speak HTTP over /dev/tcp.
+            test:
+                - CMD-SHELL
+                - >-
+                    exec 3<>/dev/tcp/127.0.0.1/9000 &&
+                    printf 'GET /health/ready HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 &&
+                    grep -q '"status": "UP"' <&3
+            interval: 10s
+            timeout: 5s
+            retries: 20
+            start_period: 60s
+        restart: unless-stopped
+
+networks:
+    keycloak:
+
+volumes:
+    postgres-data:

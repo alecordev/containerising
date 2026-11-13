@@ -1,0 +1,19 @@
+services:
+    wiremock:
+        image: wiremock/wiremock:${WIREMOCK_VERSION:-3.13.2}
+        container_name: wiremock
+        # --global-response-templating: handlebars in every response (see mappings/user-by-id.json)
+        # --verbose: log matched/unmatched requests
+        command: ["--global-response-templating", "--verbose", "--port", "8080"]
+        ports:
+            - "${WIREMOCK_PORT:-8089}:8080"
+        volumes:
+            - ./mappings:/home/wiremock/mappings
+            - ./__files:/home/wiremock/__files
+        healthcheck:
+            test: ["CMD", "curl", "-fsS", "http://localhost:8080/__admin/health"]
+            interval: 10s
+            timeout: 5s
+            retries: 5
+            start_period: 10s
+        restart: unless-stopped

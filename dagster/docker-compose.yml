@@ -1,0 +1,91 @@
+# Dagster 1.13: webserver + daemon + user-code gRPC server on PostgreSQL. Local development only.
+# The three Dagster roles share one locally built image (see Dockerfile).
+x-dagster: &dagster
+    build: .
+    image: dagster-local:1.13.29
+    environment:
+        DAGSTER_PG_HOST: postgres
+        DAGSTER_PG_USERNAME: ${DAGSTER_PG_USERNAME:-dagster}
+        DAGSTER_PG_PASSWORD: ${DAGSTER_PG_PASSWORD:-dagster}
+        DAGSTER_PG_DB: ${DAGSTER_PG_DB:-dagster}
+    volumes:
+        # compute logs / local io-manager output, shared so the webserver can show run logs
+        - dagster-storage:/opt/dagster/dagster_home/storage
+    networks:
+        - dagster
+    restart: unless-stopped
+
+services:
+    postgres:
+        image: postgres:18-alpine
+        container_name: dagster-postgres
+        environment:
+            POSTGRES_USER: ${DAGSTER_PG_USERNAME:-dagster}
+            POSTGRES_PASSWORD: ${DAGSTER_PG_PASSWORD:-dagster}
+            POSTGRES_DB: ${DAGSTER_PG_DB:-dagster}
+        volumes:
+            # postgres >= 18 keeps its (versioned) data dir below /var/lib/postgresql
+            - postgres-data:/var/lib/postgresql
+        networks:
+            - dagster
+        healthcheck:
+            test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+            interval: 5s
+            timeout: 5s
+            retries: 10
+        restart: unless-stopped
+
+    user-code:
+        <<: *dagster
+        container_name: dagster-user-code
+        command: dagster api grpc --host 0.0.0.0 --port 4000 --module-name pipeline.definitions
+        depends_on:
+            postgres:
+                condition: service_healthy   # the gRPC server loads the Postgres-backed instance at startup
+        healthcheck:
+            test: ["CMD", "dagster", "api", "grpc-health-check", "--port", "4000"]
+            interval: 10s
+            timeout: 10s
+            retries: 10
+            start_period: 15s
+
+    webserver:
+        <<: *dagster
+        container_name: dagster-webserver
+        command: dagster-webserver --host 0.0.0.0 --port 3000 --workspace /opt/dagster/dagster_home/workspace.yaml
+        ports:
+            - "${DAGSTER_PORT:-3000}:3000"
+        depends_on:
+            postgres:
+                condition: service_healthy
+            user-code:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:3000/server_info', timeout=4)"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 20s
+
+    daemon:
+        <<: *dagster
+        container_name: dagster-daemon
+        command: dagster-daemon run --workspace /opt/dagster/dagster_home/workspace.yaml
+        depends_on:
+            postgres:
+                condition: service_healthy
+            user-code:
+                condition: service_healthy
+        healthcheck:
+            test: ["CMD", "dagster-daemon", "liveness-check"]
+            interval: 15s
+            timeout: 10s
+            retries: 10
+            start_period: 30s
+
+networks:
+    dagster:
+
+volumes:
+    postgres-data:
+    dagster-storage:

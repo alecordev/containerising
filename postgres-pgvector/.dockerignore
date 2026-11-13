@@ -1,0 +1,6 @@
+# The Dockerfile has no COPY: it clones pgvector during the build.
+# Whitelist-only context. Crucially excludes the data volume dirs (a bind-mounted
+# Postgres data dir is owned by uid 999 and unreadable by the build client,
+# which breaks `docker build`).
+*
+!Dockerfile

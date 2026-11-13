@@ -1,0 +1,6 @@
+# Rename to `.dockerignore` next to the Dockerfile. Whitelist style keeps the context tiny:
+*
+!requirements.txt
+!src/
+**/__pycache__
+**/*.py[cod]

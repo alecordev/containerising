@@ -1,0 +1,58 @@
+services:
+    # Token-free AWS mock (default). Covers S3, SQS, SNS, DynamoDB, Lambda, IAM, STS, ... in memory.
+    moto:
+        image: motoserver/moto:${MOTO_VERSION:-5.2.5}
+        container_name: moto
+        # The image entrypoint is `moto_server -H 0.0.0.0`; only the port is added here
+        command: ["-p", "4566"]
+        ports:
+            - "${MOTO_PORT:-4566}:4566"
+        healthcheck:
+            test: ["CMD", "python3", "-c", "import urllib.request as u; u.urlopen('http://localhost:4566/moto-api/', timeout=3)"]
+            interval: 10s
+            timeout: 5s
+            retries: 10
+            start_period: 5s
+        restart: unless-stopped
+
+    # Real LocalStack. Since 2026-03 the `localstack/localstack` image needs a (free) account token.
+    # Opt in:  LOCALSTACK_AUTH_TOKEN=... docker compose --profile localstack up -d --wait localstack
+    localstack:
+        profiles: [localstack]
+        image: localstack/localstack:${LOCALSTACK_VERSION:-2026.10.7}
+        container_name: localstack
+        environment:
+            LOCALSTACK_AUTH_TOKEN: ${LOCALSTACK_AUTH_TOKEN:-}
+            SERVICES: ${LOCALSTACK_SERVICES:-}
+            PERSISTENCE: ${LOCALSTACK_PERSISTENCE:-0}
+        ports:
+            - "${LOCALSTACK_PORT:-4567}:4566"
+        volumes:
+            - localstack-data:/var/lib/localstack
+        healthcheck:
+            # no curl in this image
+            test: ["CMD", "python3", "-c", "import urllib.request as u; u.urlopen('http://localhost:4566/_localstack/health', timeout=3)"]
+            interval: 10s
+            timeout: 5s
+            retries: 20
+            start_period: 20s
+        restart: unless-stopped
+
+    # AWS CLI preconfigured for the mock:  docker compose run --rm aws s3 ls
+    # Point it at LocalStack instead:      AWS_ENDPOINT_URL=http://localstack:4566 docker compose run --rm aws s3 ls
+    aws:
+        profiles: [tools]
+        image: amazon/aws-cli:${AWS_CLI_VERSION:-2.40.1}
+        entrypoint: ["aws"]
+        environment:
+            AWS_ACCESS_KEY_ID: test
+            AWS_SECRET_ACCESS_KEY: test
+            AWS_DEFAULT_REGION: ${AWS_DEFAULT_REGION:-us-east-1}
+            AWS_ENDPOINT_URL: ${AWS_ENDPOINT_URL:-http://moto:4566}
+            AWS_PAGER: ""
+        depends_on:
+            moto:
+                condition: service_healthy
+
+volumes:
+    localstack-data:

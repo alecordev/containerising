@@ -1,47 +1,57 @@
-version: '3.7'
-
 services:
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:${ELASTIC_VERSION:-9.5.6}
+    container_name: elasticsearch
+    restart: unless-stopped
+    environment:
+      # Local development only: security (TLS + auth) is disabled
+      - xpack.security.enabled=false
+      - discovery.type=single-node
+      - bootstrap.memory_lock=true
+      - ES_JAVA_OPTS=-Xms${ES_HEAP:-1g} -Xmx${ES_HEAP:-1g}
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - elasticsearch-data:/usr/share/elasticsearch/data
+    ports:
+      - "${ES_PORT:-9200}:9200"
+    networks:
+      - internal-elastic-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:9200/_cluster/health | grep -qE '\"status\":\"(green|yellow)\"'"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 40s
 
-    elasticsearch:
-        image: docker.elastic.co/elasticsearch/elasticsearch:7.12.1
-        container_name: elasticsearch
-        environment:
-            - xpack.security.enabled=false
-            - discovery.type=single-node
-        ulimits:
-            memlock:
-                soft: -1
-                hard: -1
-            nofile:
-                soft: 65536
-                hard: 65536
-        cap_add:
-            - IPC_LOCK
-        volumes:
-            - ./data:/usr/share/elasticsearch/data
-        ports:
-            - 9200:9200
-            - 9300:9300
-        networks:
-            internal-elastic-network:
-
-    kibana:
-        container_name: kibana
-        image: docker.elastic.co/kibana/kibana:7.12.1
-        environment:
-            - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-        ports:
-            - 5601:5601
-        depends_on:
-            - elasticsearch
-        networks:
-            internal-elastic-network:
+  kibana:
+    image: docker.elastic.co/kibana/kibana:${ELASTIC_VERSION:-9.5.6}
+    container_name: kibana
+    restart: unless-stopped
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+    ports:
+      - "${KIBANA_PORT:-5601}:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks:
+      - internal-elastic-network
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fs http://localhost:5601/api/status >/dev/null || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
 volumes:
-    elasticsearch-data:
-        driver: local
+  elasticsearch-data:
 
 networks:
-    internal-elastic-network:
-        name: internal-elastic-network
-        external: false
+  internal-elastic-network:
+    name: internal-elastic-network

@@ -1,0 +1,8 @@
+{
+    "request": { "method": "GET", "urlPathPattern": "/api/users/[0-9]+" },
+    "response": {
+        "status": 200,
+        "headers": { "Content-Type": "application/json" },
+        "body": "{\"id\": {{request.pathSegments.[2]}}, \"name\": \"User {{request.pathSegments.[2]}}\"}"
+    }
+}

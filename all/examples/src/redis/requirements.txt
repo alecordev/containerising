@@ -1,3 +1,2 @@
-python-dotenv==0.16.0
-redis==3.5.3
-aioredis==2.0.0
+redis>=8.1,<9
+python-dotenv>=1.2

@@ -1,21 +1,21 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pymongo>=4.19,<5",
+#     "mongoengine>=0.29",
+#     "python-dotenv>=1.2",
+# ]
+# ///
+
+import os
+
 import pymongo
 
-# from pymongo import MongoClient
-#
-# # Replace these with your server details
-# MONGO_HOST = "XX.XXX.XXX.XXX"
-# MONGO_PORT = "27017"
-# MONGO_DB = "database"
-# MONGO_USER = "admin"
-# MONGO_PASS = "pass"
-#
-# uri = "mongodb://{}:{}@{}:{}/{}?authSource=admin".format(MONGO_USER, MONGO_PASS, MONGO_HOST, MONGO_PORT, MONGO_DB)
-# client = MongoClient(uri)
+MONGO_URI = os.getenv("MONGO_URI", "mongodb://admin:admin@localhost:27017/?authSource=admin")
 
 
 def connect():
-    client = pymongo.MongoClient(host="localhost", port=27017, username="admin", password="admin")
-    return client
+    return pymongo.MongoClient(MONGO_URI)
 
 
 class MongoConnect:
@@ -23,13 +23,14 @@ class MongoConnect:
         self.client = None
 
     def __enter__(self):
-        self.client = pymongo.MongoClient(host="localhost", port=27017, username="admin", password="admin")
+        self.client = connect()
         return self.client
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         self.client.close()
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     conn = connect()
+    print(conn.server_info()["version"])
     conn.close()

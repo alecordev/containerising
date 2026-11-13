@@ -1,25 +1,29 @@
-version: "3.9"
-
 services:
-
-    app:
+    api:
         build:
             context: .
             dockerfile: Dockerfile
         environment:
-            - API_KEY=key
-        volumes:
-            - ./data:/data
-        command: uvicorn api:app --host 0.0.0.0 --port 8081
+            API_KEY: ${API_KEY:-change-me}
         ports:
-            - "8081:8081"
+            - "${API_PORT:-8081}:8081"
+        healthcheck:
+            test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8081/health')"]
+            interval: 15s
+            timeout: 5s
+            retries: 5
+        restart: unless-stopped
 
     dashboard:
         build:
             context: .
             dockerfile: Dockerfile-dashboard
-        volumes:
-            - ./data:/data
-        command: streamlit run user_intents_dashboard.py
+        environment:
+            API_URL: http://api:8081
+            API_KEY: ${API_KEY:-change-me}
         ports:
-            - "8501:8501"
+            - "${DASHBOARD_PORT:-8501}:8501"
+        depends_on:
+            api:
+                condition: service_healthy
+        restart: unless-stopped

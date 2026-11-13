@@ -1,0 +1,20 @@
+# Optional. Rename to `Dockerfile` and reference it from docker-compose.yml:
+#   build: { context: ., dockerfile: Dockerfile }
+# Remember a matching .dockerignore (see .dockerignore.example).
+FROM python:3.14-slim-trixie AS builder
+ENV PIP_NO_CACHE_DIR=1 PYTHONDONTWRITEBYTECODE=1
+WORKDIR /build
+COPY requirements.txt .
+RUN pip wheel --wheel-dir /wheels -r requirements.txt
+
+FROM python:3.14-slim-trixie
+ENV PYTHONUNBUFFERED=1 PYTHONDONTWRITEBYTECODE=1
+RUN useradd --create-home --uid 10001 app
+WORKDIR /app
+COPY --from=builder /wheels /wheels
+RUN pip install --no-cache-dir /wheels/* && rm -rf /wheels
+COPY --chown=app:app src/ ./src/
+USER app
+EXPOSE 8000
+HEALTHCHECK --interval=15s --timeout=5s --retries=5 CMD python -c "import urllib.request as u; u.urlopen('http://127.0.0.1:8000/health', timeout=3)"
+CMD ["python", "-m", "src.main"]

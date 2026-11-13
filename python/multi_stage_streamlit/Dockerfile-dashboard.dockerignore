@@ -1,0 +1,10 @@
+# Context ignore for ./Dockerfile-dashboard (Streamlit image). Requires BuildKit.
+# The image only needs requirements-dashboard.txt and src/dashboard.
+*
+!requirements-dashboard.txt
+!src/dashboard/
+**/__pycache__
+**/*.py[cod]
+src/dashboard/.env*
+src/dashboard/.streamlit/secrets.toml
+src/dashboard/*.log

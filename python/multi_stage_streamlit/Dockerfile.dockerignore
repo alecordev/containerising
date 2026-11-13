@@ -1,0 +1,9 @@
+# Context ignore for ./Dockerfile (API image). Requires BuildKit (default in Docker 23+).
+# The image only needs requirements-api.txt and src/api.
+*
+!requirements-api.txt
+!src/api/
+**/__pycache__
+**/*.py[cod]
+src/api/.env*
+src/api/*.log

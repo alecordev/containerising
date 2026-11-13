@@ -1,0 +1,88 @@
+# .dockerignore (Python service) - keeps the build context small and secret-free.
+# Paths are relative to the build context (this directory).
+
+# VCS / CI
+.git
+.gitignore
+.gitattributes
+.github
+.gitlab-ci.yml
+
+# Docker files themselves (not needed inside the image)
+Dockerfile*
+**/Dockerfile*
+.dockerignore
+docker-compose*.yml
+docker-compose*.yaml
+compose*.yml
+compose*.yaml
+.docker
+
+# Secrets / local config
+.env
+.env.*
+*.env
+!.env.example
+*.pem
+*.key
+secrets/
+
+# Python artefacts
+**/__pycache__
+**/*.py[cod]
+**/*$py.class
+*.so
+*.egg-info
+.eggs
+build
+dist
+wheels
+pip-log.txt
+.venv
+venv
+env
+ENV
+
+# Tests, caches, tooling
+.pytest_cache
+.mypy_cache
+.ruff_cache
+.tox
+.nox
+.hypothesis
+.coverage
+.coverage.*
+htmlcov
+coverage.xml
+.ipynb_checkpoints
+
+# Local data / logs / databases
+data
+logs
+*.log
+*.sqlite3
+*.sqlite3-journal
+__logger
+
+# Docs
+README*
+docs
+*.md
+
+# Editors / OS
+.idea
+.vscode
+*.swp
+.DS_Store
+Thumbs.db
+
+# Selenium artefacts
+geckodriver.log
+screenshots
+*.har
+
+# uv projects and smoke tests are host-side tooling, never part of an image
+pyproject.toml
+uv.lock
+.python-version
+smoke*.py

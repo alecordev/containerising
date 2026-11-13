@@ -1,0 +1,22 @@
+# Normalise line endings: files bind-mounted into Linux containers must stay LF
+# even when checked out on Windows with core.autocrlf=true.
+* text=auto
+*.sh text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+*.conf text eol=lf
+*.cfg text eol=lf
+*.toml text eol=lf
+uv.lock text eol=lf
+*.sql text eol=lf
+*.py text eol=lf
+*.json text eol=lf
+Dockerfile* text eol=lf
+.dockerignore text eol=lf
+*.dockerignore text eol=lf
+*.env.example text eol=lf
+.env.example text eol=lf
+# Binary
+*.png binary
+*.jpg binary
+*.pem binary
